@@ -5,7 +5,7 @@
   # SnapDNS
   **Change your DNS settings without digging through Control Panel.**
 
-  [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+  [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.txt)
   ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
   ![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)
 
