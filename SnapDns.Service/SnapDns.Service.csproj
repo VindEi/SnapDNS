@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<OutputType>Exe</OutputType>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>dotnet-SnapDns.Service-b16c3c4b-0223-478c-9891-f353921930bd</UserSecretsId>
+		<ServerGarbageCollection>false</ServerGarbageCollection>
+		<ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+
+		<AssemblyName>SnapDnsService</AssemblyName>
+
+		<!-- PUBLISH SETTINGS -->
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>true</SelfContained>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<DebugType>embedded</DebugType>
+		<ApplicationIcon>SnapDns.ico</ApplicationIcon>
+
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Content Include="SnapDns.ico" />
+	</ItemGroup>
+	<ItemGroup>
+
+		<PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.1" />
+
+		<PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.1" />
+
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
+
+		<PackageReference Include="System.Management" Version="10.0.1" />
+
+	</ItemGroup>
+
+	<ItemGroup>
+
+		<ProjectReference Include="..\SnapDns.Core\SnapDns.Core.csproj" />
+
+	</ItemGroup>
+
+</Project>
