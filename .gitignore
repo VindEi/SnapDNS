@@ -1,0 +1,37 @@
+# =========================
+# FLUTTER / DART
+# =========================
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.log
+
+# Android / iOS build files
+android/.gradle/
+android/app/src/main/gen/
+android/local.properties
+*.keystore
+!default.default.keystore
+
+# =========================
+# C# / .NET (SERVICE)
+# =========================
+[Bb]in/
+[Oo]bj/
+*.user
+*.userosscache
+*.suo
+*.dbmdl
+*.jfm
+*.pfx
+
+# =========================
+# IDEs & OS Junk
+# =========================
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
