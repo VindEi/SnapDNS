@@ -13,9 +13,7 @@ class SnapDnsTheme {
         seedColor: accent,
         brightness: brightness,
         primary: accent,
-        surface: isDark ? const Color(0xFF151515) : Colors.white,
-        // FIX: Change pure Colors.white to an elegant off-white (0xFFE5E5E7)
-        // to prevent "halation" (text bleeding/glowing) and eliminate eye strain in Dark Mode.
+        surface: isDark ? const Color(0xFF151515) : const Color(0xFFFAFAFA),
         onSurface: isDark ? const Color(0xFFE5E5E7) : const Color(0xFF1A1A1A),
         outline: isDark ? Colors.white10 : Colors.black12,
       ),
