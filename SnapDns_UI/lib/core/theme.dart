@@ -6,20 +6,20 @@ class SnapDnsTheme {
 
     return ThemeData(
       brightness: brightness,
-      scaffoldBackgroundColor: isDark
-          ? const Color(0xFF0D0D0D)
-          : const Color(0xFFF5F5F7),
+      scaffoldBackgroundColor:
+          isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF5F5F7),
       primaryColor: accent,
       colorScheme: ColorScheme.fromSeed(
         seedColor: accent,
         brightness: brightness,
         primary: accent,
         surface: isDark ? const Color(0xFF151515) : Colors.white,
-        onSurface: isDark ? Colors.white : const Color(0xFF1A1A1A),
+        // FIX: Change pure Colors.white to an elegant off-white (0xFFE5E5E7)
+        // to prevent "halation" (text bleeding/glowing) and eliminate eye strain in Dark Mode.
+        onSurface: isDark ? const Color(0xFFE5E5E7) : const Color(0xFF1A1A1A),
         outline: isDark ? Colors.white10 : Colors.black12,
       ),
       scrollbarTheme: ScrollbarThemeData(
-        // Set to null or false so it hides when not in use
         thumbVisibility: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.hovered) ||
               states.contains(WidgetState.dragged)) {
