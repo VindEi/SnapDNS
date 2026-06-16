@@ -1,16 +1,24 @@
 import 'dart:async';
+import 'dart:io'; // Added for File operations
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p; // Added for path concatenation
+import '../core/constants.dart'; // Added for AppConstants
 import '../services/dns_engine.dart';
 import '../storage/profile_storage.dart';
 import '../services/system_utils.dart';
 import '../utils/dns_intelligence.dart';
-import '../services/toast_service.dart';
 import '../models/dns_configuration.dart';
 import 'settings_provider.dart';
+import 'toast_provider.dart';
 
 class DnsProvider extends ChangeNotifier {
+  final ToastProvider _toastProvider;
+
+  DnsProvider(this._toastProvider);
+
   final DnsEngine _engine = DnsEngine.create();
   Timer? _refreshTimer;
+  bool _isRefreshing = false;
 
   bool get isDesktop => DnsEngine.isDesktop;
 
@@ -34,6 +42,22 @@ class DnsProvider extends ChangeNotifier {
   Future<void> initialize() async {
     _profiles.addAll(await ProfileStorage.load());
     if (_profiles.isEmpty) await resetToDefaultProfiles();
+
+    // FIX: Re-hydrate the active mobile profile if the process was evicted by Android OS
+    if (!isDesktop) {
+      try {
+        final activeFile =
+            File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
+        if (await activeFile.exists()) {
+          final savedId = await activeFile.readAsString();
+          _activeMobileConfig =
+              _profiles.firstWhere((p) => p.id == savedId.trim());
+        }
+      } catch (_) {
+        // Fallback gracefully on corrupt or missing state records
+      }
+    }
+
     await _engine.initialize();
     await refreshStatus();
     _refreshTimer =
@@ -54,42 +78,60 @@ class DnsProvider extends ChangeNotifier {
   bool isAdapterSelected(String? id) => _manualAdapterId == id;
 
   Future<void> refreshStatus() async {
-    final state = await _engine.getStatus(_manualAdapterId ?? "");
-    isServiceConnected = state.isServiceConnected;
+    if (_isRefreshing) return;
+    _isRefreshing = true;
 
-    if (isDesktop) {
-      if (state.adapters.isNotEmpty) {
-        _adapters.clear();
-        _adapters.addAll(state.adapters);
-      }
-      _autoHardwareId = state.preferredAdapter;
-      if (state.configuration != null) _updateUI(state.configuration!);
-    } else {
-      isMobileConnected = state.isMobileConnected;
-      if (isMobileConnected) {
-        if (_activeMobileConfig != null) {
-          _updateUI(_activeMobileConfig!);
+    try {
+      final state = await _engine.getStatus(_manualAdapterId ?? "");
+      isServiceConnected = state.isServiceConnected;
+
+      if (isDesktop) {
+        if (isServiceConnected) {
+          if (state.adapters.isNotEmpty) {
+            _adapters.clear();
+            _adapters.addAll(state.adapters);
+          }
+          _autoHardwareId = state.preferredAdapter;
+          if (state.configuration != null) _updateUI(state.configuration!);
         } else {
-          systemPrimary = "SECURE DNS";
-          smartDnsValues = ["ACTIVE"];
-          smartProviderName = "SNAPDNS TUNNEL";
+          _adapters.clear();
+          systemPrimary = "---";
+          smartDnsValues = ["---"];
+          smartProviderName = "SERVICE OFFLINE";
         }
       } else {
-        systemPrimary = "AUTO";
-        smartDnsValues = ["AUTO"];
-        smartProviderName = "DISCONNECTED";
+        isMobileConnected = state.isMobileConnected;
+        if (isMobileConnected) {
+          if (_activeMobileConfig != null) {
+            _updateUI(_activeMobileConfig!);
+          } else {
+            systemPrimary = "SECURE DNS";
+            smartDnsValues = ["ACTIVE"];
+            smartProviderName = "SNAPDNS TUNNEL";
+          }
+        } else {
+          systemPrimary = "AUTO";
+          smartDnsValues = ["AUTO"];
+          smartProviderName = "DISCONNECTED";
+        }
       }
+      notifyListeners();
+    } finally {
+      _isRefreshing = false;
     }
-    notifyListeners();
   }
 
   void _updateUI(DnsConfiguration cfg) {
     systemIsDoh = cfg.primaryDns == "127.0.0.1" ||
         cfg.dohUrl.isNotEmpty ||
         cfg.dotHostname.isNotEmpty;
+
     systemPrimary = systemIsDoh
         ? (cfg.dohUrl.isNotEmpty ? cfg.dohUrl : cfg.dotHostname)
-        : (cfg.primaryDns.isEmpty ? "AUTO" : cfg.primaryDns);
+        : (cfg.primaryDns.isEmpty || cfg.primaryDns == "DHCP"
+            ? "AUTO"
+            : cfg.primaryDns);
+
     smartDnsValues = [systemPrimary.replaceFirst("https://", "")];
 
     smartProviderName = "CUSTOM RESOLVER";
@@ -105,35 +147,42 @@ class DnsProvider extends ChangeNotifier {
 
   Future<void> connectDns(
       DnsConfiguration config, SettingsProvider settings) async {
-    ToastService().showToast("APPLYING...");
+    _toastProvider.showToast("APPLYING...");
     final res = await _engine.connect(config, readableAdapterName);
 
     if (isDesktop) {
       if (res.success) {
         if (settings.autoFlush) await flushDns();
         if (settings.verifyConnection) {
-          ToastService().showToast("VERIFYING...");
+          _toastProvider.showToast("VERIFYING...");
           bool works = await SystemUtils.verifyDnsResolution();
-          ToastService()
+          _toastProvider
               .showToast(works ? "CONNECTED & VERIFIED" : "DNS NO RESOLUTION");
         } else {
-          ToastService().showToast("SUCCESS");
+          _toastProvider.showToast("SUCCESS");
         }
       } else {
-        ToastService().showToast("FAILED: ${res.message}");
+        _toastProvider.showToast("FAILED: ${res.message}");
       }
     } else {
       if (res.success) {
         _activeMobileConfig = config;
         _updateUI(config);
+
+        // FIX: Persist the active profile ID to disk to prevent state loss during Android OS sweeps
+        try {
+          final activeFile =
+              File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
+          await activeFile.writeAsString(config.id, flush: true);
+        } catch (_) {}
       }
-      ToastService().showToast(res.message);
+      _toastProvider.showToast(res.message);
     }
     await refreshStatus();
   }
 
   void resetToDefaults() async {
-    ToastService().showToast("RESETTING...");
+    _toastProvider.showToast("RESETTING...");
     bool success = await _engine.disconnect(readableAdapterName);
     if (success) {
       if (!isDesktop) {
@@ -141,11 +190,23 @@ class DnsProvider extends ChangeNotifier {
         systemPrimary = "AUTO";
         smartDnsValues = ["AUTO"];
         smartProviderName = "DISCONNECTED";
-        ToastService().showToast("VPN DISCONNECTED");
+
+        // FIX: Clear the active profile ID state file upon explicit VPN disconnection
+        try {
+          final activeFile =
+              File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
+          if (await activeFile.exists()) {
+            await activeFile.delete();
+          }
+        } catch (_) {}
+
+        _toastProvider.showToast("VPN DISCONNECTED");
       } else {
-        ToastService().showToast("DHCP RESTORED");
+        _toastProvider.showToast("DHCP RESTORED");
       }
       refreshStatus();
+    } else {
+      _toastProvider.showToast("FAILED TO DISCONNECT");
     }
   }
 
@@ -155,24 +216,30 @@ class DnsProvider extends ChangeNotifier {
     } else if (_activeMobileConfig != null) {
       await _engine.disconnect("");
       await _engine.connect(_activeMobileConfig!, "");
-      ToastService().showToast("VPN RESTARTED (CACHE FLUSHED)");
+      _toastProvider.showToast("VPN RESTARTED (CACHE FLUSHED)");
     }
   }
 
   Future<void> restartService() async {
     if (isDesktop) {
-      ToastService().showToast("UAC PROMPT...");
-      await SystemUtils.restartService();
+      _toastProvider.showToast("UAC PROMPT...");
+
+      try {
+        await SystemUtils.restartService();
+      } catch (e) {
+        debugPrint("DEBUG: [Service] Restart elevation denied: $e");
+        _toastProvider.showToast("ACCESS DENIED");
+      }
     }
   }
 
   void smartImport(DnsConfiguration? suggested) {
     if (suggested == null) {
-      ToastService().showToast("NO DATA FOUND");
+      _toastProvider.showToast("NO DATA FOUND");
       return;
     }
     addOrUpdateProfile(suggested);
-    ToastService().showToast("IMPORTED");
+    _toastProvider.showToast("IMPORTED");
   }
 
   DnsConfiguration getSystemAsConfig() => DnsConfiguration(
@@ -183,7 +250,7 @@ class DnsProvider extends ChangeNotifier {
 
   Future<void> refreshLatencies() async {
     final futures = _profiles.map((p) async {
-      p.latencyMs = await SystemUtils.checkLatency(p.primaryDns);
+      p.latencyMs = await SystemUtils.checkLatency(p);
     }).toList();
     await Future.wait(futures);
     notifyListeners();
@@ -203,7 +270,7 @@ class DnsProvider extends ChangeNotifier {
 
   void copyToClipboard(String t) {
     SystemUtils.copyToClipboard(t);
-    ToastService().showToast("COPIED");
+    _toastProvider.showToast("COPIED");
   }
 
   void addOrUpdateProfile(DnsConfiguration c) {
@@ -224,7 +291,6 @@ class DnsProvider extends ChangeNotifier {
   }
 
   void reorderProfiles(int o, int n) {
-    if (o < n) n -= 1;
     _profiles.insert(n, _profiles.removeAt(o));
     ProfileStorage.save(_profiles);
     notifyListeners();

@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../providers/settings_provider.dart';
+import '../services/update_service.dart';
+import '../providers/toast_provider.dart';
 import 'pages/main_page.dart';
 import 'pages/profiles_page.dart';
 import 'pages/settings_page.dart';
 import 'widgets/common/title_bar.dart';
 import 'widgets/common/toast_overlay.dart';
+import 'widgets/common/update_dialog.dart';
 
 class ShellPage extends StatefulWidget {
   const ShellPage({super.key});
@@ -27,12 +30,43 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
   @override
   void initState() {
     super.initState();
-    if (isDesktop) windowManager.addListener(this);
+    if (isDesktop) {
+      windowManager.addListener(this);
+    }
+
+    // Check for updates 3 seconds after launch
+    Future.delayed(
+        const Duration(seconds: 3), () => _checkForUpdates(silent: true));
+
+    // FIX 3: Trigger the icon generation safely after the first frame has rendered!
+    if (isDesktop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.read<SettingsProvider>().refreshSystemIcons();
+      });
+    }
+  }
+
+  void _checkForUpdates({bool silent = false}) async {
+    final update = await UpdateService.checkUpdate();
+
+    if (!mounted) return;
+
+    if (update != null) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => UpdateDialog(info: update),
+      );
+    } else if (!silent) {
+      context.read<ToastProvider>().showToast("YOU ARE UP TO DATE");
+    }
   }
 
   @override
   void dispose() {
-    if (isDesktop) windowManager.removeListener(this);
+    if (isDesktop) {
+      windowManager.removeListener(this);
+    }
     super.dispose();
   }
 
@@ -54,9 +88,7 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
         top: !isDesktop,
         child: Column(
           children: [
-            // PINPOINTED FIX: Always show the TitleBar. It is now internally adaptive.
             const CustomTitleBar(),
-
             Expanded(
               child: Stack(
                 children: [
@@ -65,8 +97,6 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
                 ],
               ),
             ),
-
-            // Navigation Bar
             Container(
               padding: EdgeInsets.only(
                   bottom:

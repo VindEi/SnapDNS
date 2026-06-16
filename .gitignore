@@ -35,3 +35,8 @@ android/local.properties
 *.swp
 .DS_Store
 Thumbs.db
+
+
+create.bat
+publish
+SnapDns_Installer

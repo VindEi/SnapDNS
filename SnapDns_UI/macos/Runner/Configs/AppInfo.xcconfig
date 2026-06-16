@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = snapdns
+PRODUCT_NAME = SnapDNS
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.snapdns
+PRODUCT_BUNDLE_IDENTIFIER = me.vindei.snapdns
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.

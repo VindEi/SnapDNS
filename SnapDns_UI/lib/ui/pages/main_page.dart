@@ -4,7 +4,7 @@ import '../../providers/dns_provider.dart';
 import '../../providers/dns_input_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../models/dns_configuration.dart';
-import '../../services/toast_service.dart';
+import '../../providers/toast_provider.dart';
 import '../widgets/common/dns_card.dart';
 import '../widgets/common/action_button.dart';
 import '../widgets/main/network_status_bar.dart';
@@ -18,7 +18,6 @@ class MainPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: Using context.select to ensure typing/pinging doesn't rebuild the entire page!
     final isDesktop =
         context.select<SettingsProvider, bool>((s) => s.isDesktop);
     final isSystemDnsSaved =
@@ -108,10 +107,12 @@ class MainPage extends StatelessWidget {
                   children: [
                     Expanded(
                         child: ActionButton(
-                            label: "Connect",
-                            onTap: () => _handleConnect(context),
-                            backgroundColor: cs.primary,
-                            textColor: Colors.black)),
+                      label: "Connect",
+                      onTap: () => _handleConnect(context),
+                      backgroundColor: cs.primary,
+                      textColor: cs
+                          .primary.contrastColor, // FIX: Dynamic text contrast!
+                    )),
                     const SizedBox(width: 12),
                     Expanded(
                         child: ActionButton(
@@ -131,7 +132,9 @@ class MainPage extends StatelessWidget {
                       : () => _handleConnect(context),
                   backgroundColor:
                       isMobileConnected ? Colors.redAccent : cs.primary,
-                  textColor: isMobileConnected ? Colors.white : Colors.black,
+                  textColor: isMobileConnected
+                      ? Colors.white
+                      : cs.primary.contrastColor, // FIX: Dynamic text contrast!
                 ),
             ],
           ),
@@ -149,7 +152,6 @@ class MainPage extends StatelessWidget {
   }
 
   Widget _buildChip(BuildContext context, DnsConfiguration p) {
-    // Select precisely only the match state for this specific chip
     final isSelected =
         context.select<DnsInputProvider, bool>((i) => i.isInputMatch(p));
     return ProfileChip(
@@ -220,7 +222,7 @@ class MainPage extends StatelessWidget {
   void _handleConnect(BuildContext context) {
     final input = context.read<DnsInputProvider>();
     if (!input.isInputValid) {
-      ToastService().showToast("INVALID FORMAT");
+      context.read<ToastProvider>().showToast("INVALID FORMAT");
       return;
     }
     DnsConfiguration config;

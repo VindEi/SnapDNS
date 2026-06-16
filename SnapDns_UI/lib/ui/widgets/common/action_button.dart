@@ -30,20 +30,25 @@ class _ActionButtonState extends State<ActionButton> {
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _isHovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _isHovered = false);
+      },
       child: GestureDetector(
-        // Immediate execution
-        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapDown: (_) {
+          if (mounted) setState(() => _isPressed = true);
+        },
         onTapUp: (_) {
-          setState(() => _isPressed = false);
+          if (mounted) setState(() => _isPressed = false);
           widget.onTap();
         },
-        onTapCancel: () => setState(() => _isPressed = false),
+        onTapCancel: () {
+          if (mounted) setState(() => _isPressed = false);
+        },
         child: AnimatedScale(
-          duration: const Duration(
-            milliseconds: 40,
-          ), // Ultra-fast hardware feel
+          duration: const Duration(milliseconds: 40),
           scale: _isPressed ? 0.96 : 1.0,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 100),
@@ -56,8 +61,8 @@ class _ActionButtonState extends State<ActionButton> {
                 color: _isHovered
                     ? widget.backgroundColor.withValues(alpha: 0.4)
                     : (widget.outlined
-                          ? colorScheme.outline.withValues(alpha: 0.1)
-                          : Colors.transparent),
+                        ? colorScheme.outline.withValues(alpha: 0.1)
+                        : Colors.transparent),
                 width: 1,
               ),
               boxShadow: [

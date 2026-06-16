@@ -34,31 +34,32 @@ class _AdapterTileState extends State<AdapterTile> {
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _isHovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _isHovered = false);
+      },
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(
-            milliseconds: 200,
-          ), // Slower, smoother transition
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            // EXTREMELY subtle hover (0.01 alpha)
             color: widget.isSelected
                 ? accent.withValues(alpha: 0.05)
                 : (_isHovered
-                      ? colorScheme.onSurface.withValues(alpha: 0.015)
-                      : Colors.transparent),
+                    ? colorScheme.onSurface.withValues(alpha: 0.015)
+                    : Colors.transparent),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
               color: widget.isSelected
                   ? accent
                   : (_isHovered
-                        ? colorScheme.onSurface.withValues(alpha: 0.1)
-                        : colorScheme.outline.withValues(alpha: 0.05)),
+                      ? colorScheme.onSurface.withValues(alpha: 0.1)
+                      : colorScheme.outline.withValues(alpha: 0.05)),
               width: 1,
             ),
           ),

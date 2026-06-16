@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:async';
+import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import '../models/pipe_models.dart';
@@ -35,14 +37,19 @@ const int openExisting = 3;
 final Pointer<Void> invalidHandleValue = Pointer<Void>.fromAddress(-1);
 
 class IpcClient {
+  static final _SimpleMutex _lock = _SimpleMutex();
+
   Future<PipeResponse> sendCommand(PipeRequest request) async {
-    return Platform.isWindows
-        ? _transferWindows(request)
-        : await _transferUnix(request);
+    return await _lock.protect(() async {
+      if (Platform.isWindows) {
+        return await Isolate.run(() => _transferWindows(request));
+      } else {
+        return await _transferUnix(request);
+      }
+    });
   }
 
-  // FIX: Using Arena allocator to prevent memory leaks if exceptions occur.
-  PipeResponse _transferWindows(PipeRequest request) {
+  static PipeResponse _transferWindows(PipeRequest request) {
     return using((Arena arena) {
       final pName = AppConstants.pipeName.toNativeUtf16(allocator: arena);
       Pointer<Void> hPipe = invalidHandleValue;
@@ -100,7 +107,7 @@ class IpcClient {
     });
   }
 
-  Future<PipeResponse> _transferUnix(PipeRequest request) async {
+  static Future<PipeResponse> _transferUnix(PipeRequest request) async {
     Socket? socket;
     try {
       socket = await Socket.connect(
@@ -118,14 +125,23 @@ class IpcClient {
       final List<int> responseBytes = [];
       await for (var chunk in socket) {
         responseBytes.addAll(chunk);
+
+        // FIX: Ultra-fast, allocation-free, and safe Little-Endian 32-bit length header parser.
+        // Prevents redundant sublist creation during chunk streaming.
         if (responseBytes.length >= 4) {
-          final total = ByteData.sublistView(
-                      Uint8List.fromList(responseBytes.sublist(0, 4)))
-                  .getInt32(0, Endian.little) +
-              4;
+          final int total = responseBytes[0] |
+              (responseBytes[1] << 8) |
+              (responseBytes[2] << 16) |
+              (responseBytes[3] << 24) + 4;
           if (responseBytes.length >= total) break;
         }
       }
+
+      // FIX: Guard check to prevent out-of-bounds RangeError on premature socket shutdowns
+      if (responseBytes.length < 4) {
+        return PipeResponse(success: false, message: "Offline");
+      }
+
       return PipeResponse.fromJson(
           jsonDecode(utf8.decode(responseBytes.sublist(4))));
     } catch (e) {
@@ -133,5 +149,18 @@ class IpcClient {
     } finally {
       await socket?.close();
     }
+  }
+}
+
+class _SimpleMutex {
+  Future<void> _last = Future.value();
+
+  Future<T> protect<T>(Future<T> Function() action) {
+    final completer = Completer<void>();
+    final result = _last.then((_) => action()).whenComplete(() {
+      completer.complete();
+    });
+    _last = completer.future;
+    return result;
   }
 }

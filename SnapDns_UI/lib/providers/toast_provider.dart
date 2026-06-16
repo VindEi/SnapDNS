@@ -1,11 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-class ToastService extends ChangeNotifier {
-  static final ToastService _instance = ToastService._internal();
-  factory ToastService() => _instance;
-  ToastService._internal();
-
+class ToastProvider extends ChangeNotifier {
   String statusMessage = "";
   Timer? _toastTimer;
 
@@ -17,5 +13,11 @@ class ToastService extends ChangeNotifier {
       statusMessage = "";
       notifyListeners();
     });
+  }
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    super.dispose();
   }
 }

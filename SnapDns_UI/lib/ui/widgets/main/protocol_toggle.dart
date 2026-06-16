@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../providers/settings_provider.dart';
 import '../../../providers/dns_input_provider.dart';
 
 class ProtocolToggle extends StatelessWidget {
@@ -70,8 +71,12 @@ class _ModeSwitcherIconState extends State<_ModeSwitcherIcon> {
     final colorScheme = Theme.of(context).colorScheme;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _isHovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _isHovered = false);
+      },
       child: GestureDetector(
         onTap: widget.input.toggleInputMode,
         child: AnimatedContainer(
@@ -117,10 +122,20 @@ class _MiniBtnState extends State<_MiniBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    // FIX: Map inactive buttons dynamically to onSurface values to preserve accessibility contrast in Light Theme
+    final inactiveTextColor = colorScheme.onSurface.withValues(alpha: 0.3);
+    final hoverTextColor = colorScheme.onSurface.withValues(alpha: 0.7);
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _isHovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _isHovered = false);
+      },
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
@@ -130,7 +145,7 @@ class _MiniBtnState extends State<_MiniBtn> {
               color: widget.active
                   ? widget.accent
                   : (_isHovered
-                      ? Colors.white.withValues(alpha: 0.05)
+                      ? colorScheme.onSurface.withValues(alpha: 0.05)
                       : Colors.transparent),
               borderRadius: BorderRadius.circular(3)),
           child: Text(widget.label,
@@ -138,8 +153,8 @@ class _MiniBtnState extends State<_MiniBtn> {
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   color: widget.active
-                      ? Colors.black
-                      : (_isHovered ? Colors.white : Colors.white24))),
+                      ? widget.accent.contrastColor
+                      : (_isHovered ? hoverTextColor : inactiveTextColor))),
         ),
       ),
     );

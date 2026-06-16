@@ -20,22 +20,33 @@ public static class ProcessHelper
 
             using var p = Process.Start(psi);
 
-            // FIXED: Added null check to prevent dereference warning
             if (p == null)
             {
                 logger?.LogWarning("OS failed to start process: {Cmd}", cmd);
                 return false;
             }
 
-            p.WaitForExit();
+            // Read the standard error stream asynchronously in the background to prevent deadlocks
+            var errorReaderTask = p.StandardError.ReadToEndAsync();
 
-            if (p.ExitCode != 0 && logger != null)
+            if (p.WaitForExit(5000))
             {
-                string error = p.StandardError.ReadToEnd();
-                logger.LogWarning("CLI Error: {Cmd} Code {Code}. Msg: {Msg}", cmd, p.ExitCode, error);
-            }
+                // FIX: Always observe and retrieve the task result after process termination.
+                // This ensures the asynchronous task completes, releasing the underlying Win32/Unix file handle immediately.
+                string error = errorReaderTask.GetAwaiter().GetResult();
 
-            return p.ExitCode == 0;
+                if (p.ExitCode != 0 && logger != null)
+                {
+                    logger.LogWarning("CLI Error: {Cmd} Code {Code}. Msg: {Msg}", cmd, p.ExitCode, error);
+                }
+                return p.ExitCode == 0;
+            }
+            else
+            {
+                p.Kill(); // Force-terminate hanging processes
+                logger?.LogWarning("Process execution timed out and was forcibly terminated: {Cmd}", cmd);
+                return false;
+            }
         }
         catch (Exception ex)
         {

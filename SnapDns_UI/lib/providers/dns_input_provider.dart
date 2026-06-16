@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/dns_configuration.dart';
 
 enum DnsInputMode { ip, link }
+
 enum IpType { v4, v6 }
+
 enum SecureType { dot, doh }
 
 class DnsInputProvider extends ChangeNotifier {
@@ -18,9 +20,12 @@ class DnsInputProvider extends ChangeNotifier {
   final dohController = TextEditingController();
   final dotController = TextEditingController();
 
-  TextEditingController get primaryController => activeIpType == IpType.v4 ? p4Controller : p6Controller;
-  TextEditingController get secondaryController => activeIpType == IpType.v4 ? s4Controller : s6Controller;
-  TextEditingController get activeSecureController => activeSecureType == SecureType.doh ? dohController : dotController;
+  TextEditingController get primaryController =>
+      activeIpType == IpType.v4 ? p4Controller : p6Controller;
+  TextEditingController get secondaryController =>
+      activeIpType == IpType.v4 ? s4Controller : s6Controller;
+  TextEditingController get activeSecureController =>
+      activeSecureType == SecureType.doh ? dohController : dotController;
 
   void toggleInputMode() {
     if (activeMode == DnsInputMode.ip) {
@@ -58,7 +63,10 @@ class DnsInputProvider extends ChangeNotifier {
     dohController.text = p.dohUrl;
     dotController.text = p.dotHostname;
 
-    bool hasIp = p.primaryDns.isNotEmpty || p.secondaryDns.isNotEmpty || p.ipv6Primary.isNotEmpty || p.ipv6Secondary.isNotEmpty;
+    bool hasIp = p.primaryDns.isNotEmpty ||
+        p.secondaryDns.isNotEmpty ||
+        p.ipv6Primary.isNotEmpty ||
+        p.ipv6Secondary.isNotEmpty;
     bool hasLink = p.dohUrl.isNotEmpty || p.dotHostname.isNotEmpty;
 
     if (activeMode == DnsInputMode.ip && !hasIp && hasLink) {
@@ -89,29 +97,44 @@ class DnsInputProvider extends ChangeNotifier {
 
   bool isInputMatch(DnsConfiguration p) {
     final text = activeMode == DnsInputMode.link
-        ? (activeSecureType == SecureType.doh ? dohController.text : dotController.text)
+        ? (activeSecureType == SecureType.doh
+            ? dohController.text
+            : dotController.text)
         : (activeIpType == IpType.v4 ? p4Controller.text : p6Controller.text);
-        
+
     if (text.isEmpty) {
       return false;
     }
-    
+
     if (activeMode == DnsInputMode.link) {
-      return text == (activeSecureType == SecureType.doh ? p.dohUrl : p.dotHostname);
+      return text ==
+          (activeSecureType == SecureType.doh ? p.dohUrl : p.dotHostname);
     } else {
       return text == p.primaryDns;
     }
   }
 
+  // FIX: Complete input validation covering both primary and secondary fields.
   bool get isInputValid {
-    final text = activeMode == DnsInputMode.link
-        ? (activeSecureType == SecureType.doh ? dohController.text : dotController.text)
-        : (activeIpType == IpType.v4 ? p4Controller.text : p6Controller.text);
-        
-    if (activeMode == DnsInputMode.ip) {
-      return InternetAddress.tryParse(text.trim()) != null;
+    if (activeMode == DnsInputMode.link) {
+      final text = activeSecureType == SecureType.doh
+          ? dohController.text.trim()
+          : dotController.text.trim();
+      return text.length > 3;
+    } else {
+      final primary = activeIpType == IpType.v4
+          ? p4Controller.text.trim()
+          : p6Controller.text.trim();
+      final secondary = activeIpType == IpType.v4
+          ? s4Controller.text.trim()
+          : s6Controller.text.trim();
+
+      final primaryValid = InternetAddress.tryParse(primary) != null;
+      final secondaryValid =
+          secondary.isEmpty || InternetAddress.tryParse(secondary) != null;
+
+      return primaryValid && secondaryValid;
     }
-    return text.length > 3;
   }
 
   @override

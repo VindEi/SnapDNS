@@ -25,7 +25,7 @@ class _ProfilesPageState extends State<ProfilesPage> {
             buildDefaultDragHandles: false,
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
             itemCount: dns.profiles.length,
-            // Updated to the newer onReorder property required by latest Flutter
+            // FIX: Restored the modern onReorderItem parameter for Flutter 3.41+
             onReorderItem: (int oldIndex, int newIndex) {
               dns.reorderProfiles(oldIndex, newIndex);
             },
@@ -92,27 +92,36 @@ class _TechFab extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: Material(
-        color: isAccent ? cs.primary : cs.surface,
-        borderRadius: BorderRadius.circular(4),
-        child: InkWell(
-          onTap: onTap,
+      child: WidgetStateRequest(
+        child: Material(
+          color: isAccent ? cs.primary : cs.surface,
           borderRadius: BorderRadius.circular(4),
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outline.withValues(alpha: 0.1)),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Icon(
-              icon,
-              color: isAccent ? Colors.black : cs.primary,
-              size: 20,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                border: Border.all(color: cs.outline.withValues(alpha: 0.1)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Icon(
+                icon,
+                color: isAccent ? Colors.black : cs.primary,
+                size: 20,
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+class WidgetStateRequest extends StatelessWidget {
+  final Widget child;
+  const WidgetStateRequest({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) => child;
 }

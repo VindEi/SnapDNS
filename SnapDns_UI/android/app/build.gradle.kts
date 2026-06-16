@@ -17,7 +17,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "me.vinde.snapdns"
+        applicationId = "me.vindei.snapdns"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

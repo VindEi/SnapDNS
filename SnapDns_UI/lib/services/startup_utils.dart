@@ -72,7 +72,9 @@ X-GNOME-Autostart-enabled=true
 
     if (enabled) {
       String exec = Platform.resolvedExecutable;
-      final args = launchHidden ? '<string>--minimized</string>' : '';
+      // FIX: Clean launch argument XML generation
+      final argsBlock =
+          launchHidden ? '\n        <string>--minimized</string>' : '';
 
       final content = '''
 <?xml version="1.0" encoding="UTF-8"?>
@@ -83,8 +85,7 @@ X-GNOME-Autostart-enabled=true
     <string>com.vindei.${appName.toLowerCase()}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$exec</string>
-        $args
+        <string>$exec</string>$argsBlock
     </array>
     <key>RunAtLoad</key>
     <true/>

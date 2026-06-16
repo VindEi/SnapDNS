@@ -22,12 +22,12 @@ public enum PipeCommandType
     getAdapters,
     getPreferredAdapter,
     flushDns,
-    getSyncState // MATCHED
+    getSyncState 
 }
 
 public class PipeRequest
 {
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonConverter(typeof(JsonStringEnumConverter<PipeCommandType>))]
     public PipeCommandType Command { get; set; }
     public string AdapterName { get; set; } = string.Empty;
     public DnsConfiguration? Configuration { get; set; }
@@ -40,4 +40,15 @@ public class PipeResponse
     public DnsConfiguration? Configuration { get; set; }
     public List<string>? Adapters { get; set; }
     public string? PreferredAdapterName { get; set; }
+}
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, 
+    PropertyNameCaseInsensitive = true,
+    GenerationMode = JsonSourceGenerationMode.Default)]
+[JsonSerializable(typeof(PipeRequest))]
+[JsonSerializable(typeof(PipeResponse))]
+[JsonSerializable(typeof(DnsConfiguration))]
+internal partial class SourceGenerationContext : JsonSerializerContext
+{
 }

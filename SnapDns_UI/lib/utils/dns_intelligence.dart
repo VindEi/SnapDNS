@@ -1,7 +1,6 @@
 import '../models/dns_configuration.dart';
 
 class DnsIntelligence {
-  // PINPOINTED FIX: Symmetrical, clean, and complete default profiles (v4/v6/DoH/DoT)
   static final List<DnsConfiguration> defaultProfiles = [
     DnsConfiguration(
       name: "Cloudflare",
@@ -54,7 +53,10 @@ class DnsIntelligence {
 
     final ipv4s = ipv4Regex.allMatches(input).map((m) => m.group(0)!).toList();
     final ipv6s = ipv6Regex.allMatches(input).map((m) => m.group(0)!).toList();
-    final urls = urlRegex.allMatches(input).map((m) => m.group(0)!).toList();
+
+    // FIX: Clean parsed URLs to strip trailing JSON brackets, quotes, or commas
+    final urls =
+        urlRegex.allMatches(input).map((m) => _cleanUrl(m.group(0)!)).toList();
     final dots = dotRegex.allMatches(input).map((m) => m.group(1)!).toList();
 
     if (ipv4s.isEmpty && ipv6s.isEmpty && urls.isEmpty && dots.isEmpty) {
@@ -70,6 +72,11 @@ class DnsIntelligence {
       dohUrl: urls.isNotEmpty ? urls[0] : "",
       dotHostname: dots.isNotEmpty ? dots[0] : "",
     );
+  }
+
+  // FIX: Helper to strip common text/JSON string formatting characters on raw imports
+  static String _cleanUrl(String url) {
+    return url.replaceAll(RegExp(r'["\x27,;\}$\]]+$'), '');
   }
 
   static String formatForSharing(DnsConfiguration c) {

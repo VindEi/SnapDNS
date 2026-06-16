@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../services/toast_service.dart';
+import '../../../providers/toast_provider.dart';
 
 class ToastOverlay extends StatelessWidget {
   const ToastOverlay({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final msg = context.watch<ToastService>().statusMessage;
+    final msg = context.watch<ToastProvider>().statusMessage;
     final bool isVisible = msg.isNotEmpty;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;

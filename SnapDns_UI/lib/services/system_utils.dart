@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
+import '../models/dns_configuration.dart';
 
 class SystemUtils {
   static Future<void> restartService() async {
@@ -8,9 +9,13 @@ class SystemUtils {
         '-Command',
         'Start-Process cmd -ArgumentList "/c net stop SnapDnsService & net start SnapDnsService" -Verb RunAs -WindowStyle Hidden',
       ]);
-    } else if (Platform.isLinux || Platform.isMacOS) {
-      // Assuming systemd for Linux or general shell for macOS
-      await Process.run('sudo', ['systemctl', 'restart', 'snapdns']);
+    } else if (Platform.isLinux) {
+      await Process.run('pkexec', ['systemctl', 'restart', 'snapdns']);
+    } else if (Platform.isMacOS) {
+      await Process.run('osascript', [
+        '-e',
+        'do shell script "launchctl kickstart -k system/com.vindei.snapdns" with administrator privileges'
+      ]);
     }
   }
 
@@ -20,14 +25,33 @@ class SystemUtils {
     }
   }
 
-  static Future<int> checkLatency(String ip) async {
-    if (ip.isEmpty || ip == "AUTO" || ip == "DHCP") return -1;
+  static Future<int> checkLatency(DnsConfiguration p) async {
+    String host = "";
+    int port = 53;
+
+    if (p.primaryDns.isNotEmpty) {
+      host = p.primaryDns;
+      port = 53;
+    } else if (p.dotHostname.isNotEmpty) {
+      host = p.dotHostname;
+      port = 853;
+    } else if (p.dohUrl.isNotEmpty) {
+      try {
+        final uri = Uri.parse(p.dohUrl);
+        host = uri.host;
+        port = uri.scheme == 'https' ? 443 : 80;
+      } catch (_) {
+        return -1;
+      }
+    }
+
+    if (host.isEmpty || host == "AUTO" || host == "DHCP") return -1;
     Socket? s;
     try {
       final sw = Stopwatch()..start();
       s = await Socket.connect(
-        ip,
-        53,
+        host,
+        port,
         timeout: const Duration(milliseconds: 1500),
       );
       final ms = sw.elapsedMilliseconds;
@@ -39,15 +63,23 @@ class SystemUtils {
     }
   }
 
-  // --- NEW: Cross-Platform DNS Verification ---
   static Future<bool> verifyDnsResolution() async {
-    try {
-      // We look up a common domain. If the DNS is broken, this throws or returns empty.
-      final result = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 3));
-      return result.isNotEmpty && result.first.address.isNotEmpty;
-    } catch (_) {
-      return false;
+    // FIX: Introduce a 500ms delay to allow the operating system's internal resolver
+    // to synchronize and register the new local loopback/proxy endpoint before querying
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final hosts = ['one.one.one.one', 'dns.google', 'google.com'];
+    for (var host in hosts) {
+      try {
+        final result = await InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 2));
+        if (result.isNotEmpty && result.first.address.isNotEmpty) {
+          return true;
+        }
+      } catch (_) {
+        // Fallback to the next host on failure
+      }
     }
+    return false;
   }
 }

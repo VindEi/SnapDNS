@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 import '../../utils/dns_intelligence.dart';
 import '../../models/dns_configuration.dart';
 import '../../services/mobile_vpn_engine.dart';
+import '../../services/update_service.dart';
+import '../../providers/toast_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/dns_provider.dart';
 import '../widgets/settings/settings_tile.dart';
+import '../widgets/common/update_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -15,6 +18,35 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  late TextEditingController _hexController;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = context.read<SettingsProvider>();
+    _hexController = TextEditingController(
+        text: s.isAdaptive ? "#00C8C8" : s.accentColor.toHex());
+
+    s.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    final s = context.read<SettingsProvider>();
+    if (!s.isAdaptive) {
+      final hexStr = s.accentColor.toHex();
+      if (_hexController.text.toUpperCase() != hexStr) {
+        _hexController.text = hexStr;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    context.read<SettingsProvider>().removeListener(_onSettingsChanged);
+    _hexController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>();
@@ -63,6 +95,13 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: "Alert on status changes.",
               value: s.showNotifications,
               onChanged: s.toggleNotifications,
+            ),
+            // FIX: Added the Auto Flush Cache toggle to let users control automatic cache sweeps
+            SettingsSwitch(
+              title: "Auto Flush Cache",
+              subtitle: "Clear system DNS cache on successful connection.",
+              value: s.autoFlush,
+              onChanged: s.toggleAutoFlush,
             ),
           ]),
           const SizedBox(height: 24),
@@ -127,21 +166,62 @@ class _SettingsPageState extends State<SettingsPage> {
             _listTile("External DNS Leak Test", Icons.security_rounded,
                 s.openLeakTest, colorScheme),
           ]),
-          const SizedBox(height: 40),
+          const SizedBox(height: 48),
+          Center(
+            child: InkWell(
+              onTap: () async {
+                final update = await UpdateService.checkUpdate();
+                if (update != null && context.mounted) {
+                  showDialog(
+                      context: context,
+                      builder: (_) => UpdateDialog(info: update));
+                } else if (context.mounted) {
+                  context.read<ToastProvider>().showToast("YOU ARE UP TO DATE");
+                }
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.update_rounded,
+                        size: 14, color: accent.withValues(alpha: 0.6)),
+                    const SizedBox(width: 6),
+                    Text(
+                      "CHECK FOR UPDATES",
+                      style: TextStyle(
+                        color: accent.withValues(alpha: 0.6),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Center(
             child: Text(
               s.versionText,
               style: TextStyle(
-                color: colorScheme.onSurface.withValues(alpha: 0.2),
+                color: colorScheme.onSurface.withValues(alpha: 0.15),
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
+          const SizedBox(height: 30),
         ],
       ),
     );
   }
+
+  String currentAccent(SettingsProvider s) =>
+      s.isAdaptive ? "ADAPTIVE" : s.accentColor.toHex();
 
   Widget _buildAccentPicker(SettingsProvider s, ColorScheme cs) {
     return Padding(
@@ -158,19 +238,20 @@ class _SettingsPageState extends State<SettingsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _colorCircle(s, const Color(0xFF00C8C8)),
-              _colorCircle(s, const Color(0xFF007AFF)),
-              _colorCircle(s, const Color(0xFFAF52DE)),
-              _colorCircle(s, const Color(0xFFFF9500)),
-              _colorCircle(s, const Color(0xFFFF2D55)),
-              _colorCircle(s, const Color(0xFF4CD964)),
+              _adaptiveCircle(s),
+              _colorCircle(s, const Color(0xFF00C8C8)), // Cyan
+              _colorCircle(s, const Color(0xFFFF9500)), // Orange
+              _colorCircle(s, const Color(0xFFAF52DE)), // Purple
+              _colorCircle(s, const Color(0xFFFF2D55)), // Pink
+              _customHexCircle(s), // Custom
             ],
           ),
           const SizedBox(height: 16),
           SizedBox(
             height: 35,
             child: TextField(
-              onChanged: s.updateAccentHex,
+              controller: _hexController,
+              onChanged: s.updateCustomHexPreview,
               style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
               decoration: InputDecoration(
                 hintText: "CUSTOM HEX",
@@ -190,8 +271,55 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _adaptiveCircle(SettingsProvider s) {
+    bool isSelected = s.isAdaptive;
+    return InkWell(
+      onTap: () => s.setAdaptiveAccent(),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [Colors.white, Colors.black],
+              stops: [0.5, 0.5],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border:
+                isSelected ? Border.all(color: Colors.grey, width: 2) : null),
+        child: isSelected
+            ? const Icon(Icons.check, size: 12, color: Colors.grey)
+            : null,
+      ),
+    );
+  }
+
+  Widget _customHexCircle(SettingsProvider s) {
+    Color liveColor = HexColor.fromHex(s.customHexPreview);
+    bool isSelected = s.isCustomColor; // Only checked if it's NOT a preset!
+    return InkWell(
+      onTap: () => s.applyCustomHex(),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+            color: liveColor,
+            shape: BoxShape.circle,
+            border:
+                isSelected ? Border.all(color: Colors.white, width: 2) : null),
+        child: isSelected
+            ? const Icon(Icons.check, size: 12, color: Colors.white)
+            : null,
+      ),
+    );
+  }
+
   Widget _colorCircle(SettingsProvider s, Color color) {
-    bool isSelected = s.accentColor.toARGB32() == color.toARGB32();
+    bool isSelected =
+        !s.isAdaptive && s.accentColor.toARGB32() == color.toARGB32();
     return InkWell(
       onTap: () => s.updateAccentColor(color),
       borderRadius: BorderRadius.circular(20),
@@ -210,7 +338,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // FIXED ALIGNMENT HERE
   Widget _actionBtn(String label, IconData icon, VoidCallback onTap,
           Color color, ColorScheme cs) =>
       Material(
@@ -221,7 +348,7 @@ class _SettingsPageState extends State<SettingsPage> {
           borderRadius: BorderRadius.circular(4),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            alignment: Alignment.center, // THIS MAKES IT PERFECTLY CENTERED
+            alignment: Alignment.center,
             decoration: BoxDecoration(
               border: Border.all(color: cs.outline.withValues(alpha: 0.1)),
               borderRadius: BorderRadius.circular(4),

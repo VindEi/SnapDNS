@@ -24,12 +24,10 @@ class ProfileCard extends StatelessWidget {
     required this.index,
   });
 
-  // ULTRA-SMART SUBTITLE GENERATOR (Shows Main Address + Protocol Tags)
   String _getSubtitle(DnsConfiguration c) {
     String mainInfo = "";
     List<String> tags = [];
 
-    // 1. Determine the Primary Display Info
     if (c.primaryDns.isNotEmpty) {
       mainInfo = c.primaryDns;
       if (c.ipv6Primary.isNotEmpty) tags.add("IPv6");
@@ -48,7 +46,6 @@ class ProfileCard extends StatelessWidget {
       return "UNCONFIGURED";
     }
 
-    // 2. Format with Pipe separators
     if (tags.isEmpty) return mainInfo;
     return "$mainInfo | ${tags.join(' | ')}";
   }
@@ -106,8 +103,6 @@ class ProfileCard extends StatelessWidget {
                                   color: (isMatched || isActive)
                                       ? statusColor
                                       : cs.onSurface.withValues(alpha: 0.8))),
-
-                          // THE NEW SUBTITLE
                           Text(_getSubtitle(config),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -203,6 +198,13 @@ class _DeleteButton extends StatefulWidget {
 class _DeleteButtonState extends State<_DeleteButton> {
   bool _confirm = false;
   Timer? _timer;
+
+  // FIX: Safely cancel active timers to prevent memory leaks during profile deletions
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   void _handle() {
     if (_confirm) {

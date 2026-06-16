@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/services.dart'; // Restored import
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_v2ray/flutter_v2ray.dart';
 import '../models/dns_configuration.dart';
 
 class MobileVpnEngine {
-  // Restored MethodChannel
   static const _channel = MethodChannel("me.vinde.snapdns/channel");
   static String _currentState = "DISCONNECTED";
 
@@ -20,7 +19,6 @@ class MobileVpnEngine {
     await _v2ray.initializeV2Ray();
   }
 
-  // Restored Always-On VPN Settings Redirector
   static Future<void> openVpnSettings() async {
     try {
       await _channel.invokeMethod("openVpnSettings");
@@ -41,12 +39,19 @@ class MobileVpnEngine {
 
     if (dnsEndpoint.isEmpty) return false;
 
-    // Advanced V2Ray local DNS proxy configuration with blind-parser bypass
+    // FIX: Core bootstrap builder.
+    // If the endpoint is a secure URL/Hostname, we append public bootstrap IPs (1.1.1.1 / 8.8.8.8) to the DNS array.
+    // This allows V2Ray to resolve the secure host's domain upon boot, preventing circular lookup deadlocks on mobile.
+    final List<dynamic> dnsServers = [dnsEndpoint];
+    if (dnsEndpoint.startsWith('https://') ||
+        dnsEndpoint.startsWith('tls://')) {
+      dnsServers.add('1.1.1.1');
+      dnsServers.add('8.8.8.8');
+    }
+
     final String customConfig = jsonEncode({
       "log": {"loglevel": "warning"},
-      "dns": {
-        "servers": [dnsEndpoint]
-      },
+      "dns": {"servers": dnsServers},
       "inbounds": [
         {
           "port": 10808,
@@ -62,22 +67,9 @@ class MobileVpnEngine {
         {
           "protocol": "freedom",
           "tag": "direct",
-          "settings": {
-            "domainStrategy": "UseIP",
-            "servers": [
-              {"address": "127.0.0.1", "port": 1}
-            ]
-          }
+          "settings": {"domainStrategy": "UseIP"}
         },
-        {
-          "protocol": "dns",
-          "tag": "dns-out",
-          "settings": {
-            "servers": [
-              {"address": "127.0.0.1", "port": 1}
-            ]
-          }
-        }
+        {"protocol": "dns", "tag": "dns-out", "settings": {}}
       ],
       "routing": {
         "domainStrategy": "IPIfNonMatch",
@@ -91,7 +83,6 @@ class MobileVpnEngine {
     debugPrint("DEBUG: [Vpn] Starting Tunnel with DNS: $dnsEndpoint");
 
     if (await _v2ray.requestPermission()) {
-      // Sync this configuration to Android SharedPreferences for the Quick Settings Tile
       try {
         await _channel.invokeMethod("saveLastConfig", {"config": customConfig});
       } catch (e) {

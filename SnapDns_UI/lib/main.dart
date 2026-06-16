@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/theme.dart';
-import 'services/tray_manager.dart';
 import 'core/constants.dart';
+import 'services/tray_manager.dart';
 import 'services/mobile_vpn_engine.dart';
-import 'services/toast_service.dart';
+import 'providers/toast_provider.dart';
+import 'services/single_instance.dart';
 import 'providers/dns_provider.dart';
 import 'providers/dns_input_provider.dart';
 import 'providers/settings_provider.dart';
@@ -14,10 +15,18 @@ import 'ui/shell_page.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Enforce Single Instance on Windows immediately
+  if (!SingleInstance.ensureSingleInstance()) {
+    exit(0);
+  }
+
   await AppConstants.initPaths();
 
   final settingsProvider = SettingsProvider();
   await settingsProvider.initialize();
+
+  final toastProvider = ToastProvider();
 
   bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
@@ -27,7 +36,17 @@ void main(List<String> args) async {
     await windowManager.setPreventClose(true);
 
     final tray = AppTrayManager();
-    await tray.initialize();
+
+    // FIX: Pass the flush-and-exit callback directly to the tray manager
+    await tray.initialize(onExit: () async {
+      await settingsProvider.flushSettings();
+      try {
+        await AppTrayManager()
+            .hideTray()
+            .timeout(const Duration(milliseconds: 200));
+      } catch (_) {}
+      exit(0);
+    });
 
     WindowOptions windowOptions = const WindowOptions(
       size: Size(400, 600),
@@ -39,7 +58,6 @@ void main(List<String> args) async {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      // FIXED: Added curly braces for the strict linter
       if (startMinimized) {
         await tray.showTray();
       } else {
@@ -59,9 +77,10 @@ void main(List<String> args) async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: settingsProvider),
-        ChangeNotifierProvider(create: (_) => ToastService()),
+        ChangeNotifierProvider.value(value: toastProvider),
         ChangeNotifierProvider(create: (_) => DnsInputProvider()),
-        ChangeNotifierProvider(create: (_) => DnsProvider()..initialize()),
+        ChangeNotifierProvider(
+            create: (_) => DnsProvider(toastProvider)..initialize()),
       ],
       child: const SnapDnsApp(),
     ),

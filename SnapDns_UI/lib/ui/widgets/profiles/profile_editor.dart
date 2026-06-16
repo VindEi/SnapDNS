@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/dns_provider.dart';
+import '../../../providers/settings_provider.dart';
 import '../../../models/dns_configuration.dart';
 import '../../../utils/dns_intelligence.dart';
 
@@ -36,13 +37,21 @@ class _ProfileEditorState extends State<ProfileEditor> {
   }
 
   void _autofill() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    ClipboardData? data;
 
-    // FIX: Ensure the widget hasn't been closed while waiting for clipboard
+    try {
+      data = await Clipboard.getData(Clipboard.kTextPlain);
+    } catch (e) {
+      debugPrint("DEBUG: [ProfileEditor] Clipboard read failed: $e");
+      return;
+    }
+
     if (!mounted) return;
 
-    if (data?.text != null) {
-      final config = DnsIntelligence.parseHumanText(data!.text!);
+    // FIX: Safely extract and promote the nullable string to clear the type-check warning
+    final text = data?.text;
+    if (text != null && text.isNotEmpty) {
+      final config = DnsIntelligence.parseHumanText(text);
       if (config != null) {
         setState(() {
           if (config.primaryDns.isNotEmpty) {
@@ -67,6 +76,18 @@ class _ProfileEditorState extends State<ProfileEditor> {
         });
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _p4.dispose();
+    _s4.dispose();
+    _p6.dispose();
+    _s6.dispose();
+    _doh.dispose();
+    _dot.dispose();
+    super.dispose();
   }
 
   @override
@@ -177,7 +198,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w900,
-              color: active ? Colors.black : Colors.grey,
+              color: active ? cs.primary.contrastColor : Colors.grey,
             ),
           ),
         ),
@@ -233,12 +254,12 @@ class _ProfileEditorState extends State<ProfileEditor> {
             color: cs.primary,
             borderRadius: BorderRadius.circular(2),
           ),
-          child: const Text(
+          child: Text(
             "SAVE",
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w900,
-              color: Colors.black,
+              color: cs.primary.contrastColor,
             ),
           ),
         ),

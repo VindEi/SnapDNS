@@ -6,45 +6,67 @@ import '../models/dns_configuration.dart';
 import '../core/constants.dart';
 
 class ProfileStorage {
-  static Timer? _saveDebounce;
-
   static Future<List<DnsConfiguration>> load() async {
-    try {
-      final file = File(AppConstants.profilesFilePath);
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        if (content.trim().isEmpty) return [];
-        final List json = jsonDecode(content);
-        return json.map((e) => DnsConfiguration.fromJson(e)).toList();
+    final file = File(AppConstants.profilesFilePath);
+    final backupFile = File('${AppConstants.profilesFilePath}.bak');
+
+    Future<List<DnsConfiguration>?> tryLoad(File f) async {
+      try {
+        if (await f.exists()) {
+          final content = await f.readAsString();
+          if (content.trim().isEmpty) return [];
+          final List json = jsonDecode(content);
+          return json.map((e) => DnsConfiguration.fromJson(e)).toList();
+        }
+      } catch (e) {
+        debugPrint("Error reading/parsing ${f.path}: $e");
       }
-    } catch (e) {
-      debugPrint("Error loading profiles: $e");
+      return null;
     }
+
+    var profiles = await tryLoad(file);
+    if (profiles != null) return profiles;
+
+    profiles = await tryLoad(backupFile);
+    if (profiles != null) {
+      debugPrint("Recovered DNS profiles from backup file.");
+      try {
+        await backupFile.copy(file.path);
+      } catch (_) {}
+      return profiles;
+    }
+
     return [];
   }
 
-  static void save(List<DnsConfiguration> profiles) {
-    _saveDebounce?.cancel();
-    _saveDebounce = Timer(const Duration(milliseconds: 500), () async {
-      try {
-        final directory = Directory(AppConstants.appDataPath);
-        if (!directory.existsSync()) directory.createSync(recursive: true);
+  // FIX: Removed redundant debounce timer.
+  // Profile edits/deletions are discrete clicks, not key inputs. Writing instantly eliminates data loss on exit.
+  static Future<void> save(List<DnsConfiguration> profiles) async {
+    try {
+      final directory = Directory(AppConstants.appDataPath);
+      if (!directory.existsSync()) directory.createSync(recursive: true);
 
-        final json = jsonEncode(profiles.map((e) => e.toJson()).toList());
-        final file = File(AppConstants.profilesFilePath);
-        final tempFile = File('${AppConstants.profilesFilePath}.tmp');
+      final json = jsonEncode(profiles.map((e) => e.toJson()).toList());
+      final file = File(AppConstants.profilesFilePath);
+      final tempFile = File('${AppConstants.profilesFilePath}.tmp');
+      final backupFile = File('${AppConstants.profilesFilePath}.bak');
 
-        // FIX: Atomic Save. Write to temp file first.
-        await tempFile.writeAsString(json, flush: true);
+      await tempFile.writeAsString(json, flush: true);
 
-        // On Windows, rename throws if the target file already exists, so we delete it first safely
-        if (await file.exists()) {
-          await file.delete();
+      if (await file.exists()) {
+        if (await backupFile.exists()) {
+          await backupFile.delete();
         }
-        await tempFile.rename(file.path);
-      } catch (e) {
-        debugPrint("Error saving profiles: $e");
+        await file.rename(backupFile.path);
       }
-    });
+
+      await tempFile.rename(file.path);
+
+      if (await backupFile.exists()) {
+        await backupFile.delete();
+      }
+    } catch (e) {
+      debugPrint("Error saving profiles: $e");
+    }
   }
 }

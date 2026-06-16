@@ -13,29 +13,57 @@ import '../services/tray_manager.dart';
 import '../services/startup_utils.dart';
 
 extension HexColor on Color {
+  // FIX: Overhauled hex parser to support CSS shorthand formats (3 & 4 chars)
+  // and protect the alpha channel from being cleared to transparent (zero-alpha).
   static Color fromHex(String hexString) {
-    final buffer = StringBuffer();
-    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
+    String hex = hexString.replaceFirst('#', '').trim();
+
+    // Handle 3-character shorthand (e.g. "FFF" -> "FFFFFF")
+    if (hex.length == 3) {
+      hex = hex.split('').map((c) => '$c$c').join();
+    }
+    // Handle 4-character shorthand (e.g. "FFFF" -> "FFFFFFFF")
+    else if (hex.length == 4) {
+      hex = hex.split('').map((c) => '$c$c').join();
+    }
+
+    // Default to fully opaque if no alpha is provided
+    if (hex.length == 6) {
+      hex = 'ff$hex';
+    }
+
     try {
-      return Color(int.parse(buffer.toString(), radix: 16));
+      return Color(int.parse(hex, radix: 16));
     } catch (_) {
-      return const Color(0xFF00C8C8);
+      return const Color(0xFF00C8C8); // Fallback to default Cyan
     }
   }
 
   String toHex() =>
-      '#${toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+      '#${toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+  Color get contrastColor =>
+      computeLuminance() > 0.4 ? Colors.black : Colors.white;
 }
 
 class SettingsProvider extends ChangeNotifier {
   AppSettings _settings = AppSettings();
   Timer? _confirmTimer;
   Timer? _saveDebounce;
+  Timer? _iconDebounce;
   int currentPageIndex = 1;
   bool isResetConfirming = false;
   String resetButtonText = "RESET DNS PROFILES";
   String? _cachedSvgTemplate;
+
+  static const List<String> accentPresets = [
+    "#00C8C8",
+    "#FF9500",
+    "#AF52DE",
+    "#FF2D55"
+  ];
+
+  String _customHexPreview = "#00C8C8";
+  String get customHexPreview => _customHexPreview;
 
   bool get isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -46,17 +74,32 @@ class SettingsProvider extends ChangeNotifier {
   bool get launchHidden => _settings.launchHidden;
   bool get verifyConnection => _settings.verifyConnection;
   bool get isDarkMode => _settings.theme == "Dark";
-  Color get accentColor => HexColor.fromHex(_settings.accentColor);
+
+  bool get isAdaptive => _settings.accentColor == "adaptive";
+
+  bool get isCustomColor {
+    if (isAdaptive) {
+      return false;
+    }
+    return !accentPresets.contains(accentColor.toHex());
+  }
+
+  Color get accentColor {
+    if (isAdaptive) {
+      return isDarkMode ? Colors.white : Colors.black;
+    }
+    return HexColor.fromHex(_settings.accentColor);
+  }
+
   String get versionText => "SnapDns v${AppConstants.appVersion}";
 
   Future<void> initialize() async {
     await loadSettings();
+    _customHexPreview = isAdaptive ? "#00C8C8" : _settings.accentColor;
     if (isDesktop && _settings.runOnStartup) {
-      await StartupUtils.toggle(true, launchHidden: _settings.launchHidden);
-    }
-    if (isDesktop) {
-      Future.delayed(
-          const Duration(milliseconds: 1000), () => _refreshSystemIcons());
+      try {
+        await StartupUtils.toggle(true, launchHidden: _settings.launchHidden);
+      } catch (_) {}
     }
   }
 
@@ -69,7 +112,14 @@ class SettingsProvider extends ChangeNotifier {
     if (!isDesktop) return;
     _settings.runOnStartup = v;
     _save();
-    await StartupUtils.toggle(v, launchHidden: _settings.launchHidden);
+
+    try {
+      await StartupUtils.toggle(v, launchHidden: _settings.launchHidden);
+    } catch (e) {
+      debugPrint("DEBUG: [Startup] Toggle run-on-startup failed: $e");
+      _settings.runOnStartup = !v;
+      _save();
+    }
     notifyListeners();
   }
 
@@ -96,7 +146,13 @@ class SettingsProvider extends ChangeNotifier {
     _settings.launchHidden = v;
     _save();
     if (_settings.runOnStartup) {
-      await StartupUtils.toggle(true, launchHidden: v);
+      try {
+        await StartupUtils.toggle(true, launchHidden: v);
+      } catch (e) {
+        debugPrint("DEBUG: [Startup] Toggle launch-hidden failed: $e");
+        _settings.launchHidden = !v;
+        _save();
+      }
     }
     notifyListeners();
   }
@@ -111,26 +167,59 @@ class SettingsProvider extends ChangeNotifier {
     _settings.theme = isDarkMode ? "Light" : "Dark";
     _save();
     notifyListeners();
-    if (isDesktop) await _refreshSystemIcons();
-  }
-
-  void updateAccentColor(Color color) async {
-    _settings.accentColor = color.toHex();
-    _save();
-    notifyListeners();
-    if (isDesktop) await _refreshSystemIcons();
-  }
-
-  void updateAccentHex(String hex) async {
-    if (RegExp(r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$').hasMatch(hex)) {
-      _settings.accentColor = hex.startsWith('#') ? hex : '#$hex';
-      _save();
-      notifyListeners();
-      if (isDesktop) await _refreshSystemIcons();
+    if (isDesktop) {
+      await refreshSystemIcons();
     }
   }
 
-  Future<void> _refreshSystemIcons() async {
+  void updateAccentColor(Color color) async {
+    final hex = color.toHex();
+    _settings.accentColor = hex;
+    _customHexPreview = hex;
+    _save();
+    notifyListeners();
+    if (isDesktop) {
+      await refreshSystemIcons();
+    }
+  }
+
+  void setAdaptiveAccent() async {
+    _settings.accentColor = "adaptive";
+    _save();
+    notifyListeners();
+    if (isDesktop) {
+      await refreshSystemIcons();
+    }
+  }
+
+  void applyCustomHex() async {
+    _settings.accentColor = _customHexPreview;
+    _save();
+    notifyListeners();
+    if (isDesktop) {
+      await refreshSystemIcons();
+    }
+  }
+
+  void updateCustomHexPreview(String hex) {
+    _customHexPreview = hex;
+    if (RegExp(r'^#?([0-9a-fA-F]{6})$').hasMatch(hex)) {
+      final parsed = hex.startsWith('#') ? hex : '#$hex';
+      _customHexPreview = parsed;
+      _settings.accentColor = parsed;
+      _save();
+
+      if (isDesktop) {
+        _iconDebounce?.cancel();
+        _iconDebounce = Timer(const Duration(milliseconds: 400), () {
+          refreshSystemIcons();
+        });
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> refreshSystemIcons() async {
     if (!isDesktop) return;
     try {
       _cachedSvgTemplate ??=
@@ -141,12 +230,8 @@ class SettingsProvider extends ChangeNotifier {
           isDark: isDarkMode);
       if (paths != null) {
         await Future.delayed(const Duration(milliseconds: 150));
+
         await windowManager.setIcon(paths['taskbar']!);
-        if (Platform.isWindows) {
-          await windowManager.setTitle("SnapDns ");
-          await Future.delayed(const Duration(milliseconds: 50));
-          await windowManager.setTitle("SnapDns");
-        }
         AppTrayManager().setTrayPath(paths['tray']!);
       }
     } catch (e) {
@@ -160,9 +245,14 @@ class SettingsProvider extends ChangeNotifier {
       windowManager.hide();
       Future.microtask(() => AppTrayManager().showTray());
     } else {
-      // FIX: Destroy tray explicitly to prevent ghost icons on Windows
-      await AppTrayManager().hideTray();
-      await windowManager.destroy();
+      await flushSettings();
+
+      try {
+        await AppTrayManager()
+            .hideTray()
+            .timeout(const Duration(milliseconds: 200));
+      } catch (_) {}
+      exit(0);
     }
   }
 
@@ -192,20 +282,28 @@ class SettingsProvider extends ChangeNotifier {
 
   void _save() {
     _saveDebounce?.cancel();
-    _saveDebounce = Timer(const Duration(milliseconds: 500), () async {
-      try {
-        final json = jsonEncode(_settings.toJson());
-        final file = File(AppConstants.settingsFilePath);
-        final tempFile = File('${AppConstants.settingsFilePath}.tmp');
+    _saveDebounce = Timer(const Duration(milliseconds: 500), _saveNow);
+  }
 
-        // FIX: Atomic save
-        await tempFile.writeAsString(json, flush: true);
-        if (await file.exists()) {
-          await file.delete();
-        }
-        await tempFile.rename(file.path);
-      } catch (_) {}
-    });
+  Future<void> _saveNow() async {
+    try {
+      final json = jsonEncode(_settings.toJson());
+      final file = File(AppConstants.settingsFilePath);
+      final tempFile = File('${AppConstants.settingsFilePath}.tmp');
+
+      await tempFile.writeAsString(json, flush: true);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      await tempFile.rename(file.path);
+    } catch (_) {}
+  }
+
+  Future<void> flushSettings() async {
+    if (_saveDebounce?.isActive ?? false) {
+      _saveDebounce?.cancel();
+      await _saveNow();
+    }
   }
 
   Future<void> loadSettings() async {
@@ -225,6 +323,7 @@ class SettingsProvider extends ChangeNotifier {
   void dispose() {
     _confirmTimer?.cancel();
     _saveDebounce?.cancel();
+    _iconDebounce?.cancel();
     super.dispose();
   }
 
@@ -234,7 +333,9 @@ class SettingsProvider extends ChangeNotifier {
         type: FileType.custom,
         allowedExtensions: ['json'],
         bytes: utf8.encode(json));
-    if (path != null) await File(path).writeAsString(json);
+    if (path != null) {
+      await File(path).writeAsString(json);
+    }
   }
 
   Future<void> importProfiles(Function(String) onData) async {
@@ -242,7 +343,9 @@ class SettingsProvider extends ChangeNotifier {
         type: FileType.custom, allowedExtensions: ['json']);
     if (res != null && res.files.single.path != null) {
       final content = await File(res.files.single.path!).readAsString();
-      if (content.trim().isNotEmpty) onData(content);
+      if (content.trim().isNotEmpty) {
+        onData(content);
+      }
     }
   }
 }

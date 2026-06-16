@@ -12,14 +12,17 @@ class AppTrayManager {
   Menu? _menu;
   String? _trayIconPath;
   bool _isActive = false;
+  VoidCallback? _onExit; // FIX: Cached exit callback
 
   bool get _isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  Future<void> initialize() async {
+  // FIX: Accept a custom onExit callback during initialization
+  Future<void> initialize({VoidCallback? onExit}) async {
     if (_isDesktop) {
       _systemTray = SystemTray();
       _menu = Menu();
+      _onExit = onExit;
     }
   }
 
@@ -63,7 +66,16 @@ class AppTrayManager {
 
       await _menu!.buildFrom([
         MenuItemLabel(label: 'Show', onClicked: (_) => _restore()),
-        MenuItemLabel(label: 'Exit', onClicked: (_) => exit(0)),
+        MenuItemLabel(
+            label: 'Exit',
+            onClicked: (_) {
+              // FIX: Execute custom exit routine to flush configurations to disk before termination
+              if (_onExit != null) {
+                _onExit!();
+              } else {
+                exit(0);
+              }
+            }),
       ]);
 
       await _systemTray!.setContextMenu(_menu!);
@@ -92,8 +104,13 @@ class AppTrayManager {
 
   void _restore() {
     if (!_isDesktop) return;
-    windowManager.show();
-    windowManager.focus();
-    hideTray();
+
+    Future.microtask(() async {
+      try {
+        await windowManager.show();
+        await windowManager.focus();
+        await hideTray();
+      } catch (_) {}
+    });
   }
 }
