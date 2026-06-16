@@ -33,12 +33,10 @@
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="SnapDns_UI/assets/screenshot_main.png" width="250" alt="Main Page">
-  <img src="SnapDns_UI/assets/screenshot_profiles.png" width="250" alt="Profiles List">
-  <img src="SnapDns_UI/assets/screenshot_settings.png" width="250" alt="Settings Menu">
+  <img src="SnapDns_UI/assets/snapdns_main_dark.png" width="250" alt="Main Page">
+  <img src="SnapDns_UI/assets/snapdns_profile_dark.png" width="250" alt="Profiles List">
+  <img src="SnapDns_UI/assets/snapdns_settings_dark.png" width="250" alt="Settings Menu">
 </p>
-
-_(Note: Add your actual screenshots to `SnapDns_UI/assets/` and update these filenames!)_
 
 ---
 
