@@ -30,6 +30,12 @@ void main(List<String> args) async {
 
   bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
+  // FIX #1: Render and apply dynamic icon files BEFORE the window is shown.
+  // This prevents Windows Taskbar from caching the default icon and ignoring color updates.
+  if (isDesktop) {
+    await settingsProvider.refreshSystemIcons();
+  }
+
   if (isDesktop) {
     await windowManager.ensureInitialized();
     bool startMinimized = args.contains('--minimized');
@@ -37,7 +43,6 @@ void main(List<String> args) async {
 
     final tray = AppTrayManager();
 
-    // FIX: Pass the flush-and-exit callback directly to the tray manager
     await tray.initialize(onExit: () async {
       await settingsProvider.flushSettings();
       try {
@@ -59,6 +64,8 @@ void main(List<String> args) async {
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
       if (startMinimized) {
+        // FIX #2: Explicitly hide the window container to ensure true "Launch Hidden" startup behavior
+        await windowManager.hide();
         await tray.showTray();
       } else {
         await windowManager.show();

@@ -70,17 +70,25 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: s.toggleRunOnStartup,
             ),
             if (s.isDesktop) ...[
+              // FIX: Group "Launch Hidden" directly under "Run on Startup" with a smooth slide-open animation
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: s.runOnStartup
+                    ? SettingsSwitch(
+                        title: "Launch Hidden",
+                        subtitle: "Start silently on boot.",
+                        value: s.launchHidden,
+                        onChanged: s.toggleLaunchHidden,
+                        isSubOption: true,
+                      )
+                    : const SizedBox(width: double.infinity, height: 0),
+              ),
               SettingsSwitch(
                 title: "Minimize to Tray",
                 subtitle: "Keep app running when closed.",
                 value: s.minimizeToTray,
                 onChanged: s.toggleTray,
-              ),
-              SettingsSwitch(
-                title: "Launch Hidden",
-                subtitle: "Start silently on boot.",
-                value: s.launchHidden,
-                onChanged: s.toggleLaunchHidden,
               ),
             ],
             if (!s.isDesktop)
@@ -96,7 +104,6 @@ class _SettingsPageState extends State<SettingsPage> {
               value: s.showNotifications,
               onChanged: s.toggleNotifications,
             ),
-            // FIX: Added the Auto Flush Cache toggle to let users control automatic cache sweeps
             SettingsSwitch(
               title: "Auto Flush Cache",
               subtitle: "Clear system DNS cache on successful connection.",

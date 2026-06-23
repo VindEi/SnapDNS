@@ -48,7 +48,6 @@ class _ProfileEditorState extends State<ProfileEditor> {
 
     if (!mounted) return;
 
-    // FIX: Safely extract and promote the nullable string to clear the type-check warning
     final text = data?.text;
     if (text != null && text.isNotEmpty) {
       final config = DnsIntelligence.parseHumanText(text);
@@ -233,16 +232,18 @@ class _ProfileEditorState extends State<ProfileEditor> {
 
   Widget _saveBtn(ColorScheme cs) => InkWell(
         onTap: () {
+          // FIX: Explicitly call .trim() on all string fields when saving configurations
+          // to eliminate trailing whitespaces, tab stops, and Carriage Returns (\r).
           context.read<DnsProvider>().addOrUpdateProfile(
                 DnsConfiguration(
                   id: widget.profile?.id,
-                  name: _name.text,
-                  primaryDns: _p4.text,
-                  secondaryDns: _s4.text,
-                  ipv6Primary: _p6.text,
-                  ipv6Secondary: _s6.text,
-                  dohUrl: _doh.text,
-                  dotHostname: _dot.text,
+                  name: _name.text.trim(),
+                  primaryDns: _p4.text.trim(),
+                  secondaryDns: _s4.text.trim(),
+                  ipv6Primary: _p6.text.trim(),
+                  ipv6Secondary: _s6.text.trim(),
+                  dohUrl: _doh.text.trim(),
+                  dotHostname: _dot.text.trim(),
                 ),
               );
           Navigator.pop(context);

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import '../models/dns_configuration.dart';
 
@@ -28,10 +29,12 @@ class SystemUtils {
   static Future<int> checkLatency(DnsConfiguration p) async {
     String host = "";
     int port = 53;
+    bool isStandardIp = false;
 
     if (p.primaryDns.isNotEmpty) {
       host = p.primaryDns;
       port = 53;
+      isStandardIp = true;
     } else if (p.dotHostname.isNotEmpty) {
       host = p.dotHostname;
       port = 853;
@@ -46,16 +49,119 @@ class SystemUtils {
     }
 
     if (host.isEmpty || host == "AUTO" || host == "DHCP") return -1;
+
+    if (isStandardIp) {
+      // FIX: ANTI-HIJACKING GATEWAY BYPASS.
+      // Attempt a TCP connection on Port 53 first. Since TCP requires a full three-way handshake,
+      // the ISP's gateway firewall cannot easily spoof it, returning your true physical network latency.
+      // If the TCP port is closed on the server or blocked by your router, it falls back to UDP query pinging automatically.
+      final tcpLatency = await _pingTcp(host, 53);
+      if (tcpLatency > 0) {
+        return tcpLatency;
+      }
+      return await _pingUdp(host, 53);
+    } else {
+      return await _pingTcp(host, port);
+    }
+  }
+
+  static Future<int> _pingUdp(String host, int port) async {
+    RawDatagramSocket? socket;
+    try {
+      InternetAddress? targetIp = InternetAddress.tryParse(host);
+      if (targetIp == null) {
+        final lookup = await InternetAddress.lookup(host)
+            .timeout(const Duration(milliseconds: 1000));
+        if (lookup.isEmpty) return -1;
+        targetIp = lookup.first;
+      }
+
+      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+
+      final query = Uint8List.fromList([
+        0x24,
+        0x1a,
+        0x01,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x06,
+        0x67,
+        0x6f,
+        0x6f,
+        0x67,
+        0x6c,
+        0x65,
+        0x03,
+        0x63,
+        0x6f,
+        0x6d,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x01
+      ]);
+
+      final completer = Completer<int>();
+      final sw = Stopwatch();
+
+      StreamSubscription? sub;
+      sub = socket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final dg = socket!.receive();
+          if (dg != null) {
+            sw.stop();
+            sub?.cancel();
+            completer.complete(sw.elapsedMilliseconds);
+          }
+        }
+      });
+
+      sw.start();
+      socket.send(query, targetIp, port);
+
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (!completer.isCompleted) {
+          sub?.cancel();
+          completer.complete(-1);
+        }
+      });
+
+      return await completer.future;
+    } catch (_) {
+      return -1;
+    } finally {
+      socket?.close();
+    }
+  }
+
+  static Future<int> _pingTcp(String host, int port) async {
     Socket? s;
     try {
-      final sw = Stopwatch()..start();
+      InternetAddress? targetIp = InternetAddress.tryParse(host);
+      if (targetIp == null) {
+        final lookup = await InternetAddress.lookup(host)
+            .timeout(const Duration(milliseconds: 1000));
+        if (lookup.isEmpty) return -1;
+        targetIp = lookup.first;
+      }
+
+      final sw = Stopwatch();
+      sw.start();
       s = await Socket.connect(
-        host,
+        targetIp,
         port,
         timeout: const Duration(milliseconds: 1500),
       );
-      final ms = sw.elapsedMilliseconds;
-      return ms;
+      sw.stop();
+      return sw.elapsedMilliseconds;
     } catch (_) {
       return -1;
     } finally {
@@ -64,8 +170,6 @@ class SystemUtils {
   }
 
   static Future<bool> verifyDnsResolution() async {
-    // FIX: Introduce a 500ms delay to allow the operating system's internal resolver
-    // to synchronize and register the new local loopback/proxy endpoint before querying
     await Future.delayed(const Duration(milliseconds: 500));
 
     final hosts = ['one.one.one.one', 'dns.google', 'google.com'];

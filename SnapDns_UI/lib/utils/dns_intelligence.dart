@@ -53,8 +53,6 @@ class DnsIntelligence {
 
     final ipv4s = ipv4Regex.allMatches(input).map((m) => m.group(0)!).toList();
     final ipv6s = ipv6Regex.allMatches(input).map((m) => m.group(0)!).toList();
-
-    // FIX: Clean parsed URLs to strip trailing JSON brackets, quotes, or commas
     final urls =
         urlRegex.allMatches(input).map((m) => _cleanUrl(m.group(0)!)).toList();
     final dots = dotRegex.allMatches(input).map((m) => m.group(1)!).toList();
@@ -63,20 +61,20 @@ class DnsIntelligence {
       return null;
     }
 
+    // FIX: Trim all parsed regex outputs to prevent capturing whitespaces or raw carriage returns
     return DnsConfiguration(
       name: "Imported Profile",
-      primaryDns: ipv4s.isNotEmpty ? ipv4s[0] : "",
-      secondaryDns: ipv4s.length > 1 ? ipv4s[1] : "",
-      ipv6Primary: ipv6s.isNotEmpty ? ipv6s[0] : "",
-      ipv6Secondary: ipv6s.length > 1 ? ipv6s[1] : "",
-      dohUrl: urls.isNotEmpty ? urls[0] : "",
-      dotHostname: dots.isNotEmpty ? dots[0] : "",
+      primaryDns: ipv4s.isNotEmpty ? ipv4s[0].trim() : "",
+      secondaryDns: ipv4s.length > 1 ? ipv4s[1].trim() : "",
+      ipv6Primary: ipv6s.isNotEmpty ? ipv6s[0].trim() : "",
+      ipv6Secondary: ipv6s.length > 1 ? ipv6s[1].trim() : "",
+      dohUrl: urls.isNotEmpty ? urls[0].trim() : "",
+      dotHostname: dots.isNotEmpty ? dots[0].trim() : "",
     );
   }
 
-  // FIX: Helper to strip common text/JSON string formatting characters on raw imports
   static String _cleanUrl(String url) {
-    return url.replaceAll(RegExp(r'["\x27,;\}$\]]+$'), '');
+    return url.replaceAll(RegExp(r'["\x27,;\}$\]]+$'), '').trim();
   }
 
   static String formatForSharing(DnsConfiguration c) {

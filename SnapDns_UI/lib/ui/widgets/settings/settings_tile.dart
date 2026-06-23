@@ -5,6 +5,7 @@ class SettingsSwitch extends StatelessWidget {
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool isSubOption; // FIX: Added sub-option nesting support
 
   const SettingsSwitch({
     super.key,
@@ -12,6 +13,7 @@ class SettingsSwitch extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.isSubOption = false, // Defaults to a standard root switch
   });
 
   @override
@@ -23,25 +25,45 @@ class SettingsSwitch extends StatelessWidget {
       mouseCursor: SystemMouseCursors.click,
       hoverColor: colorScheme.onSurface.withValues(alpha: 0.04),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        // FIX: Indent padding when configured as a sub-option to visually group it under its parent
+        padding: EdgeInsets.only(
+          left: isSubOption ? 32.0 : 16.0,
+          right: 16.0,
+          top: 12.0,
+          bottom: 12.0,
+        ),
         child: Row(
           children: [
+            // FIX: Add a subtle vertical subdirectory arrow to visually link it to the parent toggle
+            if (isSubOption) ...[
+              Icon(
+                Icons.subdirectory_arrow_right_rounded,
+                size: 14,
+                color: colorScheme.onSurface.withValues(alpha: 0.2),
+              ),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      fontSize: 13,
+                    style: TextStyle(
+                      fontSize: isSubOption
+                          ? 12
+                          : 13, // Slightly smaller font for sub-option hierarchy
                       fontWeight: FontWeight.bold,
+                      color: isSubOption
+                          ? colorScheme.onSurface.withValues(alpha: 0.8)
+                          : colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: isSubOption ? 10 : 11,
                       color: colorScheme.onSurface.withValues(alpha: 0.4),
                       height: 1.3,
                     ),
