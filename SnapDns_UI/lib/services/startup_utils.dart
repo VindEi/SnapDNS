@@ -67,12 +67,12 @@ X-GNOME-Autostart-enabled=true
     final dir = Directory(p.join(home, 'Library', 'LaunchAgents'));
     if (!dir.existsSync()) dir.createSync(recursive: true);
 
+    // FIX: Aligned launchctl plist filename with your official me.vinde.snapdns namespace
     final file =
-        File(p.join(dir.path, 'com.vindei.${appName.toLowerCase()}.plist'));
+        File(p.join(dir.path, 'me.vinde.${appName.toLowerCase()}.plist'));
 
     if (enabled) {
       String exec = Platform.resolvedExecutable;
-      // FIX: Clean launch argument XML generation
       final argsBlock =
           launchHidden ? '\n        <string>--minimized</string>' : '';
 
@@ -82,7 +82,7 @@ X-GNOME-Autostart-enabled=true
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.vindei.${appName.toLowerCase()}</string>
+    <string>me.vinde.${appName.toLowerCase()}</string>
     <key>ProgramArguments</key>
     <array>
         <string>$exec</string>$argsBlock

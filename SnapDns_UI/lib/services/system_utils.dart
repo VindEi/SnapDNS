@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import '../models/dns_configuration.dart';
@@ -13,9 +14,10 @@ class SystemUtils {
     } else if (Platform.isLinux) {
       await Process.run('pkexec', ['systemctl', 'restart', 'snapdns']);
     } else if (Platform.isMacOS) {
+      // FIX: Aligned daemon kickstart identifier with your official me.vinde.snapdns namespace
       await Process.run('osascript', [
         '-e',
-        'do shell script "launchctl kickstart -k system/com.vindei.snapdns" with administrator privileges'
+        'do shell script "launchctl kickstart -k system/me.vinde.snapdns" with administrator privileges'
       ]);
     }
   }
@@ -51,10 +53,6 @@ class SystemUtils {
     if (host.isEmpty || host == "AUTO" || host == "DHCP") return -1;
 
     if (isStandardIp) {
-      // FIX: ANTI-HIJACKING GATEWAY BYPASS.
-      // Attempt a TCP connection on Port 53 first. Since TCP requires a full three-way handshake,
-      // the ISP's gateway firewall cannot easily spoof it, returning your true physical network latency.
-      // If the TCP port is closed on the server or blocked by your router, it falls back to UDP query pinging automatically.
       final tcpLatency = await _pingTcp(host, 53);
       if (tcpLatency > 0) {
         return tcpLatency;
@@ -76,7 +74,11 @@ class SystemUtils {
         targetIp = lookup.first;
       }
 
-      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket = await RawDatagramSocket.bind(
+          targetIp.type == InternetAddressType.IPv6
+              ? InternetAddress.anyIPv6
+              : InternetAddress.anyIPv4,
+          0);
 
       final query = Uint8List.fromList([
         0x24,

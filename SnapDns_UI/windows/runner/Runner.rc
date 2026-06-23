@@ -92,7 +92,7 @@ BEGIN
             VALUE "CompanyName", "me.vinde" "\0"
             VALUE "FileDescription", "snapdns" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "me.vindei.snapdns" "\0"
+            VALUE "InternalName", "me.vinde.snapdns" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 me.vinde. All rights reserved." "\0"
             VALUE "OriginalFilename", "snapdns.exe" "\0"
             VALUE "ProductName", "snapdns" "\0"
