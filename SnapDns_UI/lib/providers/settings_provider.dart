@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher.dart'; // Re-added import for openLeakTest
 import 'package:window_manager/window_manager.dart';
 import '../models/app_settings.dart';
 import '../core/constants.dart';
@@ -13,21 +13,15 @@ import '../services/tray_manager.dart';
 import '../services/startup_utils.dart';
 
 extension HexColor on Color {
-  // FIX: Overhauled hex parser to support CSS shorthand formats (3 & 4 chars)
-  // and protect the alpha channel from being cleared to transparent (zero-alpha).
   static Color fromHex(String hexString) {
     String hex = hexString.replaceFirst('#', '').trim();
 
-    // Handle 3-character shorthand (e.g. "FFF" -> "FFFFFF")
     if (hex.length == 3) {
       hex = hex.split('').map((c) => '$c$c').join();
-    }
-    // Handle 4-character shorthand (e.g. "FFFF" -> "FFFFFFFF")
-    else if (hex.length == 4) {
+    } else if (hex.length == 4) {
       hex = hex.split('').map((c) => '$c$c').join();
     }
 
-    // Default to fully opaque if no alpha is provided
     if (hex.length == 6) {
       hex = 'ff$hex';
     }
@@ -35,7 +29,7 @@ extension HexColor on Color {
     try {
       return Color(int.parse(hex, radix: 16));
     } catch (_) {
-      return const Color(0xFF00C8C8); // Fallback to default Cyan
+      return const Color(0xFF00C8C8);
     }
   }
 
@@ -95,7 +89,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> initialize() async {
     await loadSettings();
-    _customHexPreview = isAdaptive ? "#00C8C8" : _settings.accentColor;
+    _customHexPreview = _settings.customHex;
     if (isDesktop && _settings.runOnStartup) {
       try {
         await StartupUtils.toggle(true, launchHidden: _settings.launchHidden);
@@ -175,7 +169,6 @@ class SettingsProvider extends ChangeNotifier {
   void updateAccentColor(Color color) async {
     final hex = color.toHex();
     _settings.accentColor = hex;
-    _customHexPreview = hex;
     _save();
     notifyListeners();
     if (isDesktop) {
@@ -193,7 +186,7 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   void applyCustomHex() async {
-    _settings.accentColor = _customHexPreview;
+    _settings.accentColor = _settings.customHex;
     _save();
     notifyListeners();
     if (isDesktop) {
@@ -206,15 +199,18 @@ class SettingsProvider extends ChangeNotifier {
     if (RegExp(r'^#?([0-9a-fA-F]{6})$').hasMatch(hex)) {
       final parsed = hex.startsWith('#') ? hex : '#$hex';
       _customHexPreview = parsed;
-      _settings.accentColor = parsed;
-      _save();
+      _settings.customHex = parsed;
 
-      if (isDesktop) {
-        _iconDebounce?.cancel();
-        _iconDebounce = Timer(const Duration(milliseconds: 400), () {
-          refreshSystemIcons();
-        });
+      if (isCustomColor) {
+        _settings.accentColor = parsed;
+        if (isDesktop) {
+          _iconDebounce?.cancel();
+          _iconDebounce = Timer(const Duration(milliseconds: 400), () {
+            refreshSystemIcons();
+          });
+        }
       }
+      _save();
     }
     notifyListeners();
   }
@@ -277,6 +273,7 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // RE-ADDED: Restored openLeakTest method to bind with settings_page.dart
   void openLeakTest() => launchUrl(Uri.parse("https://dnsleaktest.com"),
       mode: LaunchMode.externalApplication);
 
@@ -328,13 +325,14 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> exportProfiles(String json) async {
-    String? path = await FilePicker.saveFile(
-        fileName: 'profiles.json',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        bytes: utf8.encode(json));
-    if (path != null) {
-      await File(path).writeAsString(json);
+    try {
+      await FilePicker.saveFile(
+          fileName: 'profiles.json',
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          bytes: utf8.encode(json));
+    } catch (e) {
+      debugPrint("DEBUG: [Settings] Export failed: $e");
     }
   }
 

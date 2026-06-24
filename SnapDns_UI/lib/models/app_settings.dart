@@ -2,11 +2,12 @@ class AppSettings {
   bool runOnStartup;
   bool minimizeToTray;
   bool showNotifications;
-  bool autoFlush; // NEW
-  bool launchHidden; // NEW
+  bool autoFlush; 
+  bool launchHidden; 
   bool verifyConnection;
   String theme;
   String accentColor;
+  String customHex; // FIX: Added persistent storage for the user's custom hex selection
 
   AppSettings({
     this.runOnStartup = false,
@@ -17,6 +18,7 @@ class AppSettings {
     this.verifyConnection = false,
     this.theme = "Dark",
     this.accentColor = "#00C8C8",
+    this.customHex = "#00C8C8", // Defaults to Cyan
   });
 
   Map<String, dynamic> toJson() => {
@@ -28,6 +30,7 @@ class AppSettings {
     'verifyConnection': verifyConnection,
     'theme': theme,
     'accentColor': accentColor,
+    'customHex': customHex,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -39,5 +42,6 @@ class AppSettings {
     verifyConnection: json['verifyConnection'] ?? false,
     theme: json['theme'] ?? "Dark",
     accentColor: json['accentColor'] ?? "#00C8C8",
+    customHex: json['customHex'] ?? "#00C8C8",
   );
 }

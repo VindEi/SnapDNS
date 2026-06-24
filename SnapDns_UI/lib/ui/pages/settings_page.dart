@@ -24,19 +24,22 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     final s = context.read<SettingsProvider>();
-    _hexController = TextEditingController(
-        text: s.isAdaptive ? "#00C8C8" : s.accentColor.toHex());
+    _hexController = TextEditingController(text: s.customHexPreview);
 
     s.addListener(_onSettingsChanged);
   }
 
   void _onSettingsChanged() {
     final s = context.read<SettingsProvider>();
-    if (!s.isAdaptive) {
-      final hexStr = s.accentColor.toHex();
-      if (_hexController.text.toUpperCase() != hexStr) {
-        _hexController.text = hexStr;
-      }
+
+    // FIX: Normalize both strings by stripping '#' and converting them to uppercase.
+    // This prevents the controller from redundant redraws, preserving your cursor focus and position while typing.
+    final currentInput =
+        _hexController.text.replaceFirst('#', '').toUpperCase();
+    final previewInput = s.customHexPreview.replaceFirst('#', '').toUpperCase();
+
+    if (currentInput != previewInput) {
+      _hexController.text = s.customHexPreview;
     }
   }
 
@@ -70,7 +73,6 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: s.toggleRunOnStartup,
             ),
             if (s.isDesktop) ...[
-              // FIX: Group "Launch Hidden" directly under "Run on Startup" with a smooth slide-open animation
               AnimatedSize(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
