@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  build-android-linux:
-    name: Build Android & Linux
+  build-android:
+    name: Build Android
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -28,6 +28,38 @@ jobs:
           flutter-version: "3.x"
           channel: "stable"
 
+      - name: Build Android APKs
+        working-directory: ./SnapDns_UI
+        run: |
+          flutter build apk --release --split-per-abi --build-name 2.0.0 --build-number 1
+          # FIX: Renamed output APKs to use the standard technical Android architecture naming conventions
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../SnapDNS_Android_arm64-v8a.apk
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../SnapDNS_Android_armeabi-v7a.apk
+          mv build/app/outputs/flutter-apk/app-x86_64-release.apk ../SnapDNS_Android_x86_64.apk
+
+      - name: Upload Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            SnapDNS_Android_arm64-v8a.apk
+            SnapDNS_Android_armeabi-v7a.apk
+            SnapDNS_Android_x86_64.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: "stable"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -36,16 +68,7 @@ jobs:
       - name: Install Linux Build Dependencies
         run: |
           sudo apt-get update -y
-          # FIX: Added 'libayatana-appindicator3-dev' to the native build dependencies to permit the system_tray C++ compile step
           sudo apt-get install -y clang cmake git ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
-
-      - name: Build Android APKs
-        working-directory: ./SnapDns_UI
-        run: |
-          flutter build apk --release --split-per-abi --build-name 2.0.0 --build-number 1
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../SnapDNS_Android_arm64.apk
-          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../SnapDNS_Android_arm32.apk
-          mv build/app/outputs/flutter-apk/app-x86_64-release.apk ../SnapDNS_Android_x86_64.apk
 
       - name: Build Linux Flutter UI
         working-directory: ./SnapDns_UI
@@ -66,11 +89,7 @@ jobs:
       - name: Upload Artifacts
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            SnapDNS_Android_arm64.apk
-            SnapDNS_Android_arm32.apk
-            SnapDNS_Android_x86_64.apk
-            SnapDNS_Linux_x64.zip
+          files: SnapDNS_Linux_x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
