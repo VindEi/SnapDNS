@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:io'; // Added for File operations
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p; // Added for path concatenation
-import '../core/constants.dart'; // Added for AppConstants
+import 'package:path/path.dart' as p;
+import '../core/constants.dart';
 import '../services/dns_engine.dart';
 import '../storage/profile_storage.dart';
 import '../services/system_utils.dart';
@@ -19,6 +19,7 @@ class DnsProvider extends ChangeNotifier {
   final DnsEngine _engine = DnsEngine.create();
   Timer? _refreshTimer;
   bool _isRefreshing = false;
+  bool _isFlushing = false;
 
   bool get isDesktop => DnsEngine.isDesktop;
 
@@ -43,7 +44,6 @@ class DnsProvider extends ChangeNotifier {
     _profiles.addAll(await ProfileStorage.load());
     if (_profiles.isEmpty) await resetToDefaultProfiles();
 
-    // FIX: Re-hydrate the active mobile profile if the process was evicted by Android OS
     if (!isDesktop) {
       try {
         final activeFile =
@@ -53,9 +53,7 @@ class DnsProvider extends ChangeNotifier {
           _activeMobileConfig =
               _profiles.firstWhere((p) => p.id == savedId.trim());
         }
-      } catch (_) {
-        // Fallback gracefully on corrupt or missing state records
-      }
+      } catch (_) {}
     }
 
     await _engine.initialize();
@@ -169,7 +167,6 @@ class DnsProvider extends ChangeNotifier {
         _activeMobileConfig = config;
         _updateUI(config);
 
-        // FIX: Persist the active profile ID to disk to prevent state loss during Android OS sweeps
         try {
           final activeFile =
               File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
@@ -191,7 +188,6 @@ class DnsProvider extends ChangeNotifier {
         smartDnsValues = ["AUTO"];
         smartProviderName = "DISCONNECTED";
 
-        // FIX: Clear the active profile ID state file upon explicit VPN disconnection
         try {
           final activeFile =
               File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
@@ -211,12 +207,29 @@ class DnsProvider extends ChangeNotifier {
   }
 
   Future<void> flushDns() async {
-    if (isDesktop) {
-      await _engine.flush();
-    } else if (_activeMobileConfig != null) {
-      await _engine.disconnect("");
-      await _engine.connect(_activeMobileConfig!, "");
-      _toastProvider.showToast("VPN RESTARTED (CACHE FLUSHED)");
+    if (_isFlushing) return;
+    _isFlushing = true;
+
+    try {
+      if (isDesktop) {
+        _toastProvider.showToast("FLUSHING...");
+        // FIX: Verify if the background flush command actually succeeded on the service daemon
+        bool success = await _engine.flush();
+        if (success) {
+          _toastProvider.showToast("DNS CACHE FLUSHED");
+        } else {
+          _toastProvider.showToast("FLUSH FAILED (SERVICE OFFLINE)");
+        }
+      } else if (_activeMobileConfig != null) {
+        _toastProvider.showToast("FLUSHING...");
+        await _engine.disconnect("");
+        await _engine.connect(_activeMobileConfig!, "");
+        _toastProvider.showToast("VPN RESTARTED (CACHE FLUSHED)");
+      } else {
+        _toastProvider.showToast("NO ACTIVE TUNNEL");
+      }
+    } finally {
+      _isFlushing = false;
     }
   }
 

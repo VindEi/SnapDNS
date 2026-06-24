@@ -31,7 +31,10 @@ abstract class DnsEngine {
   Future<void> initialize();
   Future<PipeResponse> connect(DnsConfiguration config, String adapterName);
   Future<bool> disconnect(String adapterName);
-  Future<void> flush();
+
+  // FIX: Changed return type from void to bool to track native success states
+  Future<bool> flush();
+
   Future<DnsEngineState> getStatus(String adapterName);
 }
 
@@ -61,8 +64,11 @@ class DesktopDnsEngine implements DnsEngine {
   }
 
   @override
-  Future<void> flush() async {
-    await _ipc.sendCommand(PipeRequest(command: PipeCommandType.flushDns));
+  Future<bool> flush() async {
+    // FIX: Propagate the IPC pipeline success state to the UI provider
+    final res =
+        await _ipc.sendCommand(PipeRequest(command: PipeCommandType.flushDns));
+    return res.success;
   }
 
   @override
@@ -101,7 +107,9 @@ class MobileDnsEngine implements DnsEngine {
   }
 
   @override
-  Future<void> flush() async {}
+  Future<bool> flush() async {
+    return true;
+  }
 
   @override
   Future<DnsEngineState> getStatus(String adapterName) async {
