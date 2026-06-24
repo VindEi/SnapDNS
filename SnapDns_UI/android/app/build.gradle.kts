@@ -23,9 +23,10 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        ndk {
-            abiFilters.addAll(setOf("armeabi-v7a", "arm64-v8a", "x86_64"))
-        }
+        // FIX: Commented out the manual abiFilters block to resolve the compile-time conflict with Flutter's --split-per-abi flag
+        // ndk {
+        //     abiFilters.addAll(setOf("armeabi-v7a", "arm64-v8a", "x86_64"))
+        // }
     }
 
     buildTypes {
