@@ -4,13 +4,14 @@ using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using System.Text;
 
 namespace SnapDns.Service.Services;
 
 public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposable
 {
     private UdpClient? _udpListener;
-    
+
     private static readonly Dictionary<string, IPAddress[]> StaticHosts = new(StringComparer.OrdinalIgnoreCase)
     {
         { "cloudflare-dns.com", [IPAddress.Parse("1.1.1.1"), IPAddress.Parse("1.0.0.1")] },
@@ -20,14 +21,14 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         { "dns.adguard-dns.com", [IPAddress.Parse("94.140.14.14"), IPAddress.Parse("94.140.15.15")] }
     };
 
-    private static readonly SocketsHttpHandler Handler = new() 
-    { 
+    private static readonly SocketsHttpHandler Handler = new()
+    {
         PooledConnectionLifetime = TimeSpan.FromMinutes(5),
         ConnectCallback = async (context, cancellationToken) =>
         {
             var host = context.DnsEndPoint.Host;
             var port = context.DnsEndPoint.Port;
-            
+
             IPAddress[] ips;
             if (host == "127.0.0.1" || host == "localhost")
             {
@@ -39,9 +40,13 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
             }
             else
             {
-                ips = await Dns.GetHostAddressesAsync(host, cancellationToken);
+                ips = await ResolveHostViaUdpBootstrap(host, cancellationToken);
+                if (ips.Length == 0)
+                {
+                    ips = await Dns.GetHostAddressesAsync(host, cancellationToken);
+                }
             }
-            
+
             var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             try
             {
@@ -55,7 +60,7 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
             }
         }
     };
-    
+
     private static readonly HttpClient _httpClient = new(Handler);
 
     private CancellationTokenSource? _cts;
@@ -78,15 +83,33 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         _cts = new CancellationTokenSource();
         try
         {
-            _udpListener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 53));
+            _udpListener = CreateUdpListener();
             _ = Task.Run(() => ListenLoop(dohUrl, dotHostname, _cts.Token));
             return Task.FromResult(true);
         }
-        catch (Exception ex) 
-        { 
-            logger.LogError("Proxy bind failed: {Msg}", ex.Message); 
+        catch (Exception ex)
+        {
+            logger.LogError("Proxy bind failed: {Msg}", ex.Message);
             return Task.FromResult(false);
         }
+    }
+
+    private UdpClient CreateUdpListener()
+    {
+        var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 53));
+        if (OperatingSystem.IsWindows())
+        {
+            const int SIO_UDP_CONNRESET = -1744830452;
+            try
+            {
+                listener.Client.IOControl(SIO_UDP_CONNRESET, [0], null);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning("Failed to apply SIO_UDP_CONNRESET on listener: {Msg}", ex.Message);
+            }
+        }
+        return listener;
     }
 
     private async Task ListenLoop(string doh, string dot, CancellationToken ct)
@@ -101,12 +124,14 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
             }
             catch (OperationCanceledException)
             {
-                break; // Intentional service shutdown
+                break;
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset)
+            {
+                continue;
             }
             catch (Exception ex)
             {
-                // FIX: If the cancellation token was triggered, abort immediately and do not attempt to re-bind the socket.
-                // Prevents background proxy leaks when transitioning back to standard IPv4 configs.
                 if (ct.IsCancellationRequested)
                 {
                     break;
@@ -119,7 +144,7 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
                     try
                     {
                         _udpListener?.Dispose();
-                        _udpListener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 53));
+                        _udpListener = CreateUdpListener();
                     }
                     catch (Exception rebindEx)
                     {
@@ -127,13 +152,13 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
                     }
                 }
 
-                try 
-                { 
-                    await Task.Delay(1000, ct); 
-                } 
-                catch 
-                { 
-                    break; 
+                try
+                {
+                    await Task.Delay(1000, ct);
+                }
+                catch
+                {
+                    break;
                 }
             }
         }
@@ -170,7 +195,7 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
             using var content = new ByteArrayContent(query);
             content.Headers.ContentType = new MediaTypeHeaderValue("application/dns-message");
             var resp = await _httpClient.PostAsync(url, content, ct);
-            
+
             if (resp.IsSuccessStatusCode && resp.Content.Headers.ContentType?.MediaType == "application/dns-message")
             {
                 return await resp.Content.ReadAsByteArrayAsync(ct);
@@ -182,32 +207,43 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
 
     private async Task<byte[]?> ForwardToDot(byte[] query, string host, CancellationToken ct)
     {
-        await _dotStreamSemaphore.WaitAsync(ct);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(2500);
+
         try
         {
-            var stream = await GetDotStream(host, ct);
+            await _dotStreamSemaphore.WaitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+
+        try
+        {
+            var stream = await GetDotStream(host, timeoutCts.Token);
             if (stream == null) return null;
 
             byte[] tcpQuery = new byte[query.Length + 2];
             BinaryPrimitives.WriteUInt16BigEndian(tcpQuery.AsSpan(0, 2), (ushort)query.Length);
             query.CopyTo(tcpQuery, 2);
 
-            await stream.WriteAsync(tcpQuery, ct);
+            await stream.WriteAsync(tcpQuery, timeoutCts.Token);
 
             byte[] lenBuf = new byte[2];
-            await stream.ReadExactlyAsync(lenBuf, ct);
+            await stream.ReadExactlyAsync(lenBuf, timeoutCts.Token);
             byte[] resp = new byte[BinaryPrimitives.ReadUInt16BigEndian(lenBuf)];
-            await stream.ReadExactlyAsync(resp, ct);
+            await stream.ReadExactlyAsync(resp, timeoutCts.Token);
             return resp;
         }
-        catch 
-        { 
-            CloseDot(); 
-            return null; 
+        catch
+        {
+            CloseDot();
+            return null;
         }
-        finally 
-        { 
-            _dotStreamSemaphore.Release(); 
+        finally
+        {
+            _dotStreamSemaphore.Release();
         }
     }
 
@@ -220,8 +256,10 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         {
             if (_dotStream != null && _dotClient?.Connected == true) return _dotStream;
             CloseDot();
-            
+
             _dotClient = new TcpClient();
+            _dotClient.ReceiveTimeout = 2000;
+            _dotClient.SendTimeout = 2000;
 
             IPAddress[] ips;
             if (StaticHosts.TryGetValue(host, out var cachedIps))
@@ -230,7 +268,11 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
             }
             else
             {
-                ips = await Dns.GetHostAddressesAsync(host, ct);
+                ips = await ResolveHostViaUdpBootstrap(host, ct);
+                if (ips.Length == 0)
+                {
+                    ips = await Dns.GetHostAddressesAsync(host, ct);
+                }
             }
 
             await _dotClient.ConnectAsync(ips, 853, ct);
@@ -242,16 +284,133 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         finally { _dotSemaphore.Release(); }
     }
 
+    private static async Task<IPAddress[]> ResolveHostViaUdpBootstrap(string host, CancellationToken ct)
+    {
+        byte[] query = BuildDnsQuery(host);
+        using var udp = new UdpClient();
+        udp.Client.SendTimeout = 1500;
+        udp.Client.ReceiveTimeout = 1500;
+
+        if (OperatingSystem.IsWindows())
+        {
+            const int SIO_UDP_CONNRESET = -1744830452;
+            try { udp.Client.IOControl(SIO_UDP_CONNRESET, [0], null); } catch { }
+        }
+
+        try
+        {
+            await udp.SendAsync(query, query.Length, "1.1.1.1", 53);
+            var result = await udp.ReceiveAsync(ct);
+            return ParseDnsResponse(result.Buffer);
+        }
+        catch
+        {
+            try
+            {
+                using var fallbackUdp = new UdpClient();
+                fallbackUdp.Client.SendTimeout = 1500;
+                fallbackUdp.Client.ReceiveTimeout = 1500;
+
+                if (OperatingSystem.IsWindows())
+                {
+                    const int SIO_UDP_CONNRESET = -1744830452;
+                    try { fallbackUdp.Client.IOControl(SIO_UDP_CONNRESET, [0], null); } catch { }
+                }
+
+                await fallbackUdp.SendAsync(query, query.Length, "8.8.8.8", 53);
+                var result = await fallbackUdp.ReceiveAsync(ct);
+                return ParseDnsResponse(result.Buffer);
+            }
+            catch
+            {
+                return [];
+            }
+        }
+    }
+
+    private static byte[] BuildDnsQuery(string domain)
+    {
+        var parts = domain.Split('.');
+        var query = new List<byte> { 0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        foreach (var part in parts)
+        {
+            byte len = (byte)part.Length;
+            query.Add(len);
+            query.AddRange(Encoding.ASCII.GetBytes(part));
+        }
+        query.Add(0x00);
+        query.AddRange([0x00, 0x01, 0x00, 0x01]);
+        return [.. query];
+    }
+
+    private static IPAddress[] ParseDnsResponse(byte[] buffer)
+    {
+        try
+        {
+            if (buffer.Length < 12) return [];
+            int questions = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(4, 2));
+            int answers = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(6, 2));
+
+            int pos = 12;
+            for (int i = 0; i < questions; i++)
+            {
+                pos = SkipName(buffer, pos);
+                pos += 4;
+            }
+
+            var ips = new List<IPAddress>();
+            for (int i = 0; i < answers; i++)
+            {
+                pos = SkipName(buffer, pos);
+                if (pos + 10 > buffer.Length) break;
+
+                ushort type = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(pos, 2));
+                ushort dataLen = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(pos + 8, 2));
+                pos += 10;
+
+                if (type == 1 && dataLen == 4)
+                {
+                    if (pos + 4 <= buffer.Length)
+                    {
+                        ips.Add(new IPAddress(buffer.AsSpan(pos, 4).ToArray()));
+                    }
+                }
+                else if (type == 28 && dataLen == 16)
+                {
+                    if (pos + 16 <= buffer.Length)
+                    {
+                        ips.Add(new IPAddress(buffer.AsSpan(pos, 16).ToArray()));
+                    }
+                }
+                pos += dataLen;
+            }
+            return [.. ips];
+        }
+        catch { return []; }
+    }
+
+    private static int SkipName(byte[] buffer, int offset)
+    {
+        while (offset < buffer.Length)
+        {
+            int len = buffer[offset];
+            if ((len & 0xC0) == 0xC0) return offset + 2;
+            if (len == 0) return offset + 1;
+            offset += len + 1;
+        }
+        return offset;
+    }
+
     private void CloseDot() { _dotStream?.Dispose(); _dotClient?.Dispose(); _dotStream = null; _dotClient = null; }
-    
-    public void Stop() 
-    { 
-        _cts?.Cancel(); 
-        _udpListener?.Dispose(); 
-        _udpListener = null; 
-        CloseDot(); 
-        ActiveDohUrl = null; 
-        ActiveDotHostname = null; 
+
+    public void Stop()
+    {
+        _cts?.Cancel();
+        _udpListener?.Dispose();
+        _udpListener = null;
+        CloseDot();
+        ActiveDohUrl = null;
+        ActiveDotHostname = null;
     }
 
     public void Dispose()

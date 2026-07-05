@@ -1,71 +1,80 @@
 import 'dart:io';
-import 'dart:ffi';
-import 'package:ffi/ffi.dart';
-
-final _kernel32 = DynamicLibrary.open('kernel32.dll');
-final _user32 = DynamicLibrary.open('user32.dll');
-
-final _createMutexW = _kernel32.lookupFunction<
-    Pointer<Void> Function(Pointer<Void>, Int32, Pointer<Utf16>),
-    Pointer<Void> Function(Pointer<Void>, int, Pointer<Utf16>)>('CreateMutexW');
-
-final _getLastError =
-    _kernel32.lookupFunction<Uint32 Function(), int Function()>('GetLastError');
-
-// FIX: Added direct kernel32 binding to CloseHandle
-final _closeHandle = _kernel32.lookupFunction<Int32 Function(Pointer<Void>),
-    int Function(Pointer<Void>)>('CloseHandle');
-
-final _findWindowW = _user32.lookupFunction<
-    Pointer<Void> Function(Pointer<Utf16>, Pointer<Utf16>),
-    Pointer<Void> Function(Pointer<Utf16>, Pointer<Utf16>)>('FindWindowW');
-
-final _showWindow = _user32.lookupFunction<Int32 Function(Pointer<Void>, Int32),
-    int Function(Pointer<Void>, int)>('ShowWindow');
-
-final _setForegroundWindow = _user32.lookupFunction<
-    Int32 Function(Pointer<Void>),
-    int Function(Pointer<Void>)>('SetForegroundWindow');
+import 'dart:async';
+import 'package:window_manager/window_manager.dart';
 
 class SingleInstance {
-  // Global Mutex reference to persist across IDE Hot Restarts
-  static Pointer<Void>? _mutexHandle;
+  // ignore: unused_field
+  static ServerSocket? _unixSocket;
 
-  static bool ensureSingleInstance() {
-    if (!Platform.isWindows) return true;
-
-    // Bypasses check if the current process space is already holding a valid Mutex handle
-    if (_mutexHandle != null && _mutexHandle!.address != 0) {
+  static Future<bool> ensureSingleInstance() async {
+    if (Platform.isWindows) {
+      // On Windows, the single-instance check is handled natively inside main.cpp
+      // before any window or Dart VM is created to prevent "flashbang" window flashes.
       return true;
+    } else if (Platform.isLinux || Platform.isMacOS) {
+      return await _ensureUnix();
     }
+    return true;
+  }
 
-    return using((Arena arena) {
-      final mutexName =
-          'SnapDns_SingleInstance_Mutex_v2'.toNativeUtf16(allocator: arena);
-      final handle = _createMutexW(nullptr, 0, mutexName);
-
-      // 183 = ERROR_ALREADY_EXISTS
-      if (_getLastError() == 183) {
-        if (handle.address != 0 && handle.address != -1) {
-          _closeHandle(handle); // Safely release duplicate handle resources
+  // --- UNIX DOMAIN SOCKET CHECK (macOS / Linux) ---
+  static Future<bool> _ensureUnix() async {
+    const socketPath = '/tmp/snapdns_single_instance.sock';
+    try {
+      // 1. Try binding to the socket path
+      return await _bindUnix(socketPath);
+    } catch (e) {
+      // 2. Bind failed, check if the other instance is actually alive by connecting to it
+      try {
+        final client = await Socket.connect(
+          InternetAddress(socketPath, type: InternetAddressType.unix),
+          0,
+          timeout: const Duration(seconds: 1),
+        );
+        client.add('show'.codeUnits);
+        await client.flush();
+        await client.close();
+        return false; // Exit this duplicate process since the other instance is running
+      } catch (_) {
+        // 3. Connection failed, meaning the socket file is stale and dead!
+        // Safely delete the orphaned file and attempt to bind again to let the app open.
+        try {
+          final file = File(socketPath);
+          if (await file.exists()) {
+            await file.delete();
+          }
+          return await _bindUnix(socketPath); // Try binding a clean socket
+        } catch (_) {
+          return true; // Extreme fallback: open app anyway if filesystem is locked
         }
-
-        final windowName1 = 'SnapDns'.toNativeUtf16(allocator: arena);
-        final windowName2 = 'SnapDns '.toNativeUtf16(allocator: arena);
-
-        var hwnd = _findWindowW(nullptr, windowName1);
-        if (hwnd.address == 0) hwnd = _findWindowW(nullptr, windowName2);
-
-        if (hwnd.address != 0) {
-          _showWindow(hwnd, 9); // 9 = SW_RESTORE
-          _setForegroundWindow(hwnd);
-        }
-
-        return false;
       }
+    }
+  }
 
-      _mutexHandle = handle;
-      return true;
+  static Future<bool> _bindUnix(String socketPath) async {
+    final socket = await ServerSocket.bind(
+      InternetAddress(socketPath, type: InternetAddressType.unix),
+      0,
+    );
+    _unixSocket = socket;
+
+    socket.listen((client) {
+      client.listen(
+        (data) {
+          final message = String.fromCharCodes(data).trim();
+          if (message == 'show') {
+            Future.microtask(() async {
+              try {
+                await windowManager.show();
+                await windowManager.focus();
+              } catch (_) {}
+            });
+          }
+        },
+        onDone: () => client.close(),
+        onError: (_) => client.destroy(),
+      );
     });
+    return true;
   }
 }

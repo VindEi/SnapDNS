@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart'; // Re-added import for openLeakTest
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import '../models/app_settings.dart';
 import '../core/constants.dart';
@@ -90,6 +90,7 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> initialize() async {
     await loadSettings();
     _customHexPreview = _settings.customHex;
+
     if (isDesktop && _settings.runOnStartup) {
       try {
         await StartupUtils.toggle(true, launchHidden: _settings.launchHidden);
@@ -220,10 +221,12 @@ class SettingsProvider extends ChangeNotifier {
     try {
       _cachedSvgTemplate ??=
           await rootBundle.loadString('assets/SnapDns.svg', cache: false);
+
       final paths = await IconEngine.generateSystemIcons(
           rawSvg: _cachedSvgTemplate!,
           accentColor: accentColor,
           isDark: isDarkMode);
+
       if (paths != null) {
         await Future.delayed(const Duration(milliseconds: 150));
 
@@ -273,7 +276,6 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // RE-ADDED: Restored openLeakTest method to bind with settings_page.dart
   void openLeakTest() => launchUrl(Uri.parse("https://dnsleaktest.com"),
       mode: LaunchMode.externalApplication);
 

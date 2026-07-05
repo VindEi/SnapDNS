@@ -5,14 +5,12 @@ import 'package:path_provider/path_provider.dart';
 class AppConstants {
   static const String pipeName = r'\\.\pipe\SnapDns_IPC_v1';
 
-  // FIX: Shifted from /tmp to /var/run to bypass systemd's PrivateTmp sandbox namespace isolation on Linux
   static const String unixSocketPath = '/var/run/snapdns.sock';
 
   static const String repoOwner = "VindEi";
   static const String repoName = "SnapDNS";
-  static const String appVersion = "2.0.0";
+  static const String appVersion = "2.0.1";
 
-  // We initialize this in main.dart now
   static String appDataPath = "";
 
   static Future<void> initPaths() async {

@@ -9,7 +9,6 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
 {
     private static readonly SemaphoreSlim _asyncLock = new(1, 1);
 
-    // FIX: Expanded junk/virtual interface filter to exclude Npcap, WinPcap, and standard packet-capture drivers
     private static readonly string[] Junk = [
         "virtual", "pseudo", "filter", "miniport", "vmware", "hyper-v",
         "qos", "debugger", "microsoft", "bridge", "bluetooth", "loopback", "wireguard", "wfp",
@@ -26,10 +25,10 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
                 bool started = await dnsProxy.StartAsync(config.DohUrl, config.DotHostname);
                 if (!started)
                 {
-                    return new PipeResponse 
-                    { 
-                        Success = false, 
-                        Message = "Failed to start local DNS proxy (Port 53 may be in use by another application)." 
+                    return new PipeResponse
+                    {
+                        Success = false,
+                        Message = "Failed to start local DNS proxy (Port 53 may be in use by another application)."
                     };
                 }
                 config.PrimaryDns = "127.0.0.1";
@@ -54,7 +53,7 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
                 if (!string.IsNullOrEmpty(config.Ipv6Primary)) args.Add(config.Ipv6Primary);
                 if (!string.IsNullOrEmpty(config.Ipv6Secondary)) args.Add(config.Ipv6Secondary);
 
-                if (args.Count == 2) args.Add("Empty"); 
+                if (args.Count == 2) args.Add("Empty");
                 success = ProcessHelper.Run("networksetup", args, logger);
             }
             else if (OperatingSystem.IsLinux())
@@ -80,17 +79,15 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
 
     private bool SetWindowsDns(string adapter, DnsConfiguration config)
     {
-        // 1. Configure IPv4
-        List<string> pArgs = ["interface", "ipv4", "set", "dns", $"name={adapter}", "static", config.PrimaryDns, "primary"];
+        List<string> pArgs = ["interface", "ipv4", "set", "dns", $"name={adapter}", "static", config.PrimaryDns, "primary", "validate=no"];
         bool pSuccess = ProcessHelper.Run("netsh", pArgs, logger);
 
         if (!string.IsNullOrEmpty(config.SecondaryDns))
         {
-            List<string> sArgs = ["interface", "ipv4", "add", "dns", $"name={adapter}", config.SecondaryDns, "index=2"];
+            List<string> sArgs = ["interface", "ipv4", "add", "dns", $"name={adapter}", config.SecondaryDns, "index=2", "validate=no"];
             ProcessHelper.Run("netsh", sArgs, logger);
         }
 
-        // 2. Configure IPv6 if supported by the hardware interface
         var ni = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n => n.Name == adapter);
         bool supportsIpv6 = ni != null && ni.Supports(NetworkInterfaceComponent.IPv6);
 
@@ -98,18 +95,25 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
         {
             if (!string.IsNullOrEmpty(config.Ipv6Primary))
             {
-                List<string> ip6pArgs = ["interface", "ipv6", "set", "dns", $"name={adapter}", "static", config.Ipv6Primary, "primary"];
+                List<string> ip6pArgs = ["interface", "ipv6", "set", "dns", $"name={adapter}", "static", config.Ipv6Primary, "primary", "validate=no"];
                 ProcessHelper.Run("netsh", ip6pArgs, logger);
 
                 if (!string.IsNullOrEmpty(config.Ipv6Secondary))
                 {
-                    List<string> ip6sArgs = ["interface", "ipv6", "add", "dns", $"name={adapter}", config.Ipv6Secondary, "index=2"];
+                    List<string> ip6sArgs = ["interface", "ipv6", "add", "dns", $"name={adapter}", config.Ipv6Secondary, "index=2", "validate=no"];
                     ProcessHelper.Run("netsh", ip6sArgs, logger);
                 }
             }
             else
             {
-                ProcessHelper.Run("netsh", ["interface", "ipv6", "set", "dnsservers", $"name={adapter}", "source=dhcp"], logger);
+                if (config.PrimaryDns == "127.0.0.1")
+                {
+                    ProcessHelper.Run("netsh", ["interface", "ipv6", "delete", "dnsservers", $"name={adapter}", "all"], logger);
+                }
+                else
+                {
+                    ProcessHelper.Run("netsh", ["interface", "ipv6", "set", "dnsservers", $"name={adapter}", "source=dhcp"], logger);
+                }
             }
         }
 
@@ -126,7 +130,7 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
             if (OperatingSystem.IsWindows())
             {
                 success = ProcessHelper.Run("netsh", ["interface", "ipv4", "set", "dnsservers", $"name={adapter}", "source=dhcp"], logger);
-                
+
                 var ni = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n => n.Name == adapter);
                 if (ni != null && ni.Supports(NetworkInterfaceComponent.IPv6))
                 {
@@ -166,25 +170,16 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
             p.WaitForExit();
             
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var line in lines)
+            // FIX: Extract the service name from the previous index line (i - 1)
+            for (int i = 0; i < lines.Length; i++)
             {
-                if (line.Contains($"Device: {bsdName}"))
+                if (lines[i].Contains($"Device: {bsdName}") && i > 0)
                 {
-                    int openParen = line.IndexOf('(');
-                    if (openParen > 0)
+                    string prevLine = lines[i - 1].Trim();
+                    int closeParen = prevLine.IndexOf(')');
+                    if (closeParen >= 0 && closeParen < prevLine.Length - 1)
                     {
-                        string servicePart = line[..openParen].Trim();
-                        int closeParenIndex = servicePart.IndexOf(')');
-                        if (closeParenIndex >= 0)
-                        {
-                            servicePart = servicePart[(closeParenIndex + 1)..].Trim();
-                        }
-                        else
-                        {
-                            int firstSpace = servicePart.IndexOf(' ');
-                            if (firstSpace > 0) servicePart = servicePart[(firstSpace + 1)..].Trim();
-                        }
-                        return servicePart;
+                        return prevLine[(closeParen + 1)..].Trim();
                     }
                 }
             }
@@ -209,7 +204,7 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
                         !Junk.Any(j => n.Name.Contains(j, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
-        var preferred = all.FirstOrDefault(n => n.GetIPProperties().GatewayAddresses.Count > 0);
+        var preferred = all.FirstOrDefault(n => HasActiveGateway(n));
         var target = all.FirstOrDefault(n => n.Name == manualAdapterName) ?? preferred;
 
         return Task.FromResult(new PipeResponse
@@ -221,6 +216,18 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
         });
     }
 
+    private static bool HasActiveGateway(NetworkInterface ni)
+    {
+        try
+        {
+            return ni.GetIPProperties().GatewayAddresses.Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private DnsConfiguration GetCurrentDns(NetworkInterface ni)
     {
         try
@@ -229,9 +236,9 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
                 .Select(d => d.ToString()).ToList();
 
             var firstDns = dns.FirstOrDefault() ?? "DHCP";
-            return new DnsConfiguration 
-            { 
-                PrimaryDns = firstDns, 
+            return new DnsConfiguration
+            {
+                PrimaryDns = firstDns,
                 SecondaryDns = dns.Skip(1).FirstOrDefault() ?? "",
                 DohUrl = firstDns == "127.0.0.1" ? (dnsProxy.ActiveDohUrl ?? "") : "",
                 DotHostname = firstDns == "127.0.0.1" ? (dnsProxy.ActiveDotHostname ?? "") : ""

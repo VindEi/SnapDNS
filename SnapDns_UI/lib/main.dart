@@ -7,7 +7,7 @@ import 'core/constants.dart';
 import 'services/tray_manager.dart';
 import 'services/mobile_vpn_engine.dart';
 import 'providers/toast_provider.dart';
-import 'services/single_instance.dart';
+import 'services/single_instance.dart'; // Re-added the import
 import 'providers/dns_provider.dart';
 import 'providers/dns_input_provider.dart';
 import 'providers/settings_provider.dart';
@@ -16,8 +16,7 @@ import 'ui/shell_page.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Enforce Single Instance on Windows immediately
-  if (!SingleInstance.ensureSingleInstance()) {
+  if (!await SingleInstance.ensureSingleInstance()) {
     exit(0);
   }
 
@@ -30,8 +29,6 @@ void main(List<String> args) async {
 
   bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  // FIX #1: Render and apply dynamic icon files BEFORE the window is shown.
-  // This prevents Windows Taskbar from caching the default icon and ignoring color updates.
   if (isDesktop) {
     await settingsProvider.refreshSystemIcons();
   }
@@ -64,7 +61,6 @@ void main(List<String> args) async {
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
       if (startMinimized) {
-        // FIX #2: Explicitly hide the window container to ensure true "Launch Hidden" startup behavior
         await windowManager.hide();
         await tray.showTray();
       } else {

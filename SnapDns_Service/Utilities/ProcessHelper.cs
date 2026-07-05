@@ -13,6 +13,7 @@ public static class ProcessHelper
                 FileName = cmd,
                 CreateNoWindow = true,
                 UseShellExecute = false,
+                RedirectStandardOutput = true, 
                 RedirectStandardError = true
             };
 
@@ -26,25 +27,25 @@ public static class ProcessHelper
                 return false;
             }
 
-            // Read the standard error stream asynchronously in the background to prevent deadlocks
-            var errorReaderTask = p.StandardError.ReadToEndAsync();
+            // Asynchronously read both streams in the background
+            var outputTask = p.StandardOutput.ReadToEndAsync();
+            var errorTask = p.StandardError.ReadToEndAsync();
 
-            if (p.WaitForExit(5000))
+            if (p.WaitForExit(10000))
             {
-                // FIX: Always observe and retrieve the task result after process termination.
-                // This ensures the asynchronous task completes, releasing the underlying Win32/Unix file handle immediately.
-                string error = errorReaderTask.GetAwaiter().GetResult();
+                string output = outputTask.GetAwaiter().GetResult();
+                string error = errorTask.GetAwaiter().GetResult();
 
                 if (p.ExitCode != 0 && logger != null)
                 {
-                    logger.LogWarning("CLI Error: {Cmd} Code {Code}. Msg: {Msg}", cmd, p.ExitCode, error);
+                    logger.LogWarning("CLI Error: {Cmd} Code {Code}. Output: {Out} Msg: {Msg}", cmd, p.ExitCode, output, error);
                 }
                 return p.ExitCode == 0;
             }
             else
             {
-                p.Kill(); // Force-terminate hanging processes
-                logger?.LogWarning("Process execution timed out and was forcibly terminated: {Cmd}", cmd);
+                try { p.Kill(); } catch { }
+                logger?.LogWarning("Process execution timed out (10s) and was forcibly terminated: {Cmd}", cmd);
                 return false;
             }
         }

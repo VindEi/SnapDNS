@@ -126,18 +126,16 @@ class IpcClient {
       await for (var chunk in socket) {
         responseBytes.addAll(chunk);
 
-        // FIX: Ultra-fast, allocation-free, and safe Little-Endian 32-bit length header parser.
-        // Prevents redundant sublist creation during chunk streaming.
         if (responseBytes.length >= 4) {
-          final int total = responseBytes[0] |
-              (responseBytes[1] << 8) |
-              (responseBytes[2] << 16) |
-              (responseBytes[3] << 24) + 4;
+          final int total = (responseBytes[0] |
+                  (responseBytes[1] << 8) |
+                  (responseBytes[2] << 16) |
+                  (responseBytes[3] << 24)) +
+              4;
           if (responseBytes.length >= total) break;
         }
       }
 
-      // FIX: Guard check to prevent out-of-bounds RangeError on premature socket shutdowns
       if (responseBytes.length < 4) {
         return PipeResponse(success: false, message: "Offline");
       }

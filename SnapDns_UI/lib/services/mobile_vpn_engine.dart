@@ -1,111 +1,72 @@
-import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_v2ray/flutter_v2ray.dart';
 import '../models/dns_configuration.dart';
 
 class MobileVpnEngine {
   static const _channel = MethodChannel("me.vinde.snapdns/channel");
-  static String _currentState = "DISCONNECTED";
+  static bool _isConnected = false;
 
-  static final FlutterV2ray _v2ray = FlutterV2ray(
-    onStatusChanged: (V2RayStatus status) {
-      _currentState = status.state;
-      debugPrint("DEBUG: [Vpn] Connection State Changed: ${status.state}");
-    },
-  );
-
-  static Future<void> initialize() async {
-    await _v2ray.initializeV2Ray();
-  }
+  static Future<void> initialize() async {}
 
   static Future<void> openVpnSettings() async {
     try {
       await _channel.invokeMethod("openVpnSettings");
-    } catch (e) {
-      debugPrint("DEBUG: [Vpn] Failed to open VPN Settings: $e");
-    }
+    } catch (_) {}
   }
 
   static Future<bool> startDnsTunnel(DnsConfiguration config) async {
-    String dnsEndpoint;
-    if (config.dohUrl.isNotEmpty) {
-      dnsEndpoint = config.dohUrl;
-    } else if (config.dotHostname.isNotEmpty) {
-      dnsEndpoint = "tls://${config.dotHostname}";
-    } else {
-      dnsEndpoint = config.primaryDns;
-    }
+    try {
+      String hostName = "";
 
-    if (dnsEndpoint.isEmpty) return false;
+      if (config.dohUrl.isNotEmpty) {
+        try {
+          hostName = Uri.parse(config.dohUrl).host;
+        } catch (_) {}
+      } else if (config.dotHostname.isNotEmpty) {
+        hostName = config.dotHostname;
+      }
 
-    // FIX: Core bootstrap builder.
-    // If the endpoint is a secure URL/Hostname, we append public bootstrap IPs (1.1.1.1 / 8.8.8.8) to the DNS array.
-    // This allows V2Ray to resolve the secure host's domain upon boot, preventing circular lookup deadlocks on mobile.
-    final List<dynamic> dnsServers = [dnsEndpoint];
-    if (dnsEndpoint.startsWith('https://') ||
-        dnsEndpoint.startsWith('tls://')) {
-      dnsServers.add('1.1.1.1');
-      dnsServers.add('8.8.8.8');
-    }
+      final List<String> resolvedIps = [];
 
-    final String customConfig = jsonEncode({
-      "log": {"loglevel": "warning"},
-      "dns": {"servers": dnsServers},
-      "inbounds": [
-        {
-          "port": 10808,
-          "protocol": "socks",
-          "settings": {"auth": "noauth", "udp": true, "ip": "127.0.0.1"},
-          "sniffing": {
-            "enabled": true,
-            "destOverride": ["http", "tls"]
+      if (hostName.isNotEmpty) {
+        try {
+          final lookup = await InternetAddress.lookup(hostName)
+              .timeout(const Duration(seconds: 2));
+          if (lookup.isNotEmpty) {
+            resolvedIps.addAll(lookup.map((e) => e.address));
           }
+        } catch (_) {
+          // Fallback handled on socket level
         }
-      ],
-      "outbounds": [
-        {
-          "protocol": "freedom",
-          "tag": "direct",
-          "settings": {"domainStrategy": "UseIP"}
-        },
-        {"protocol": "dns", "tag": "dns-out", "settings": {}}
-      ],
-      "routing": {
-        "domainStrategy": "IPIfNonMatch",
-        "rules": [
-          {"type": "field", "port": "53", "outboundTag": "dns-out"},
-          {"type": "field", "network": "tcp,udp", "outboundTag": "direct"}
-        ]
-      }
-    });
-
-    debugPrint("DEBUG: [Vpn] Starting Tunnel with DNS: $dnsEndpoint");
-
-    if (await _v2ray.requestPermission()) {
-      try {
-        await _channel.invokeMethod("saveLastConfig", {"config": customConfig});
-      } catch (e) {
-        debugPrint("DEBUG: [Vpn] Failed to save config to native prefs: $e");
       }
 
-      await _v2ray.startV2Ray(
-        remark: "SnapDns Resolver",
-        config: customConfig,
-        proxyOnly: false,
-      );
-      return true;
+      final bool success = await _channel.invokeMethod("startVpn", {
+        "primaryDns":
+            config.primaryDns.isNotEmpty ? config.primaryDns : "1.1.1.1",
+        "secondaryDns":
+            config.secondaryDns.isNotEmpty ? config.secondaryDns : null,
+        "privateDns": config.dotHostname.isNotEmpty ? config.dotHostname : null,
+        "dohUrl": config.dohUrl.isNotEmpty ? config.dohUrl : null,
+        "hostName": hostName.isNotEmpty ? hostName : null,
+        "resolvedIps": resolvedIps.isNotEmpty ? resolvedIps : null,
+      });
+
+      _isConnected = success;
+      return success;
+    } catch (e) {
+      _isConnected = false;
+      return false;
     }
-
-    return false;
   }
 
   static Future<void> stopTunnel() async {
-    await _v2ray.stopV2Ray();
-    debugPrint("DEBUG: [Vpn] Tunnel Stop requested.");
+    try {
+      await _channel.invokeMethod("stopVpn");
+      _isConnected = false;
+    } catch (_) {}
   }
 
   static Future<bool> isConnected() async {
-    return _currentState == "CONNECTED";
+    return _isConnected;
   }
 }

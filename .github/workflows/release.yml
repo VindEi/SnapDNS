@@ -27,12 +27,12 @@ jobs:
         with:
           flutter-version: "3.x"
           channel: "stable"
+          cache: true
 
       - name: Build Android APKs
         working-directory: ./SnapDns_UI
         run: |
-          flutter build apk --release --split-per-abi --build-name 2.0.0 --build-number 1
-          # FIX: Renamed output APKs to use the standard technical Android architecture naming conventions
+          flutter build apk --release --split-per-abi
           mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../SnapDNS_Android_arm64-v8a.apk
           mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../SnapDNS_Android_armeabi-v7a.apk
           mv build/app/outputs/flutter-apk/app-x86_64-release.apk ../SnapDNS_Android_x86_64.apk
@@ -59,6 +59,7 @@ jobs:
         with:
           flutter-version: "3.x"
           channel: "stable"
+          cache: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -72,7 +73,7 @@ jobs:
 
       - name: Build Linux Flutter UI
         working-directory: ./SnapDns_UI
-        run: flutter build linux --release --build-name 2.0.0 --build-number 1
+        run: flutter build linux --release
 
       - name: Build Linux C# Service
         working-directory: ./SnapDns_Service
@@ -105,6 +106,7 @@ jobs:
         with:
           flutter-version: "3.x"
           channel: "stable"
+          cache: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -113,7 +115,7 @@ jobs:
 
       - name: Build macOS Flutter UI
         working-directory: ./SnapDns_UI
-        run: flutter build macos --release --build-name 2.0.0 --build-number 1
+        run: flutter build macos --release
 
       - name: Build macOS C# Service
         working-directory: ./SnapDns_Service
@@ -146,6 +148,7 @@ jobs:
         with:
           flutter-version: "3.x"
           channel: "stable"
+          cache: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -153,11 +156,11 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Build Windows Flutter UI
-        working-directory: .\SnapDns_UI
-        run: flutter build windows --release --build-name 2.0.0 --build-number 1
+        working-directory: ./SnapDns_UI
+        run: flutter build windows --release
 
       - name: Build Windows C# Service
-        working-directory: .\SnapDns_Service
+        working-directory: ./SnapDns_Service
         run: dotnet publish SnapDns.Service.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
 
       - name: Package Windows Portable Bundle

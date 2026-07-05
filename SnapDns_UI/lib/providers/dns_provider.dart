@@ -8,6 +8,7 @@ import '../storage/profile_storage.dart';
 import '../services/system_utils.dart';
 import '../utils/dns_intelligence.dart';
 import '../models/dns_configuration.dart';
+import '../services/tray_manager.dart';
 import 'settings_provider.dart';
 import 'toast_provider.dart';
 
@@ -96,6 +97,10 @@ class DnsProvider extends ChangeNotifier {
           systemPrimary = "---";
           smartDnsValues = ["---"];
           smartProviderName = "SERVICE OFFLINE";
+
+          if (isDesktop) {
+            AppTrayManager().updateTooltip("Service offline");
+          }
         }
       } else {
         isMobileConnected = state.isMobileConnected;
@@ -113,33 +118,70 @@ class DnsProvider extends ChangeNotifier {
           smartProviderName = "DISCONNECTED";
         }
       }
-      notifyListeners();
+    } catch (_) {
+      // Safe boundary catch
     } finally {
       _isRefreshing = false;
+      notifyListeners();
     }
   }
 
   void _updateUI(DnsConfiguration cfg) {
-    systemIsDoh = cfg.primaryDns == "127.0.0.1" ||
-        cfg.dohUrl.isNotEmpty ||
-        cfg.dotHostname.isNotEmpty;
-
+    systemIsDoh = cfg.primaryDns == "127.0.0.1";
     systemPrimary = systemIsDoh
         ? (cfg.dohUrl.isNotEmpty ? cfg.dohUrl : cfg.dotHostname)
         : (cfg.primaryDns.isEmpty || cfg.primaryDns == "DHCP"
             ? "AUTO"
             : cfg.primaryDns);
 
-    smartDnsValues = [systemPrimary.replaceFirst("https://", "")];
-
     smartProviderName = "CUSTOM RESOLVER";
+    String protocol = "IP";
+
+    if (systemIsDoh) {
+      protocol = cfg.dohUrl.isNotEmpty ? "DoH" : "DoT";
+    }
+
     for (var p in _profiles) {
       if ((systemIsDoh &&
               (p.dohUrl == systemPrimary || p.dotHostname == systemPrimary)) ||
           (!systemIsDoh && p.primaryDns == systemPrimary)) {
         smartProviderName = p.name.toUpperCase();
+        if (p.dohUrl.isNotEmpty && systemIsDoh) {
+          protocol = "DoH";
+        } else if (p.dotHostname.isNotEmpty && systemIsDoh) {
+          protocol = "DoT";
+        } else if (p.ipv6Primary.isNotEmpty) {
+          protocol = "IPv6";
+        } else {
+          protocol = "IPv4";
+        }
         break;
       }
+    }
+
+    String cleanDisplayValue = systemPrimary;
+    if (systemIsDoh) {
+      try {
+        final uri = Uri.tryParse(cleanDisplayValue);
+        if (uri != null && uri.host.isNotEmpty) {
+          cleanDisplayValue = uri.host;
+        } else {
+          cleanDisplayValue = cleanDisplayValue
+              .replaceFirst("https://", "")
+              .replaceFirst("http://", "")
+              .split("/")
+              .first;
+        }
+      } catch (_) {}
+    }
+
+    smartDnsValues = [cleanDisplayValue];
+
+    if (isDesktop) {
+      final String displayName = smartProviderName == "CUSTOM RESOLVER"
+          ? "Custom"
+          : smartProviderName[0] + smartProviderName.substring(1).toLowerCase();
+      AppTrayManager().updateTooltip("$displayName ($protocol)");
     }
   }
 
@@ -199,6 +241,10 @@ class DnsProvider extends ChangeNotifier {
         _toastProvider.showToast("VPN DISCONNECTED");
       } else {
         _toastProvider.showToast("DHCP RESTORED");
+
+        if (isDesktop) {
+          AppTrayManager().updateTooltip("System Default (DHCP)");
+        }
       }
       refreshStatus();
     } else {
@@ -213,7 +259,6 @@ class DnsProvider extends ChangeNotifier {
     try {
       if (isDesktop) {
         _toastProvider.showToast("FLUSHING...");
-        // FIX: Verify if the background flush command actually succeeded on the service daemon
         bool success = await _engine.flush();
         if (success) {
           _toastProvider.showToast("DNS CACHE FLUSHED");

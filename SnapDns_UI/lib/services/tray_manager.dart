@@ -12,12 +12,12 @@ class AppTrayManager {
   Menu? _menu;
   String? _trayIconPath;
   bool _isActive = false;
-  VoidCallback? _onExit; // FIX: Cached exit callback
+  VoidCallback? _onExit;
+  String? _currentTooltip; 
 
   bool get _isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  // FIX: Accept a custom onExit callback during initialization
   Future<void> initialize({VoidCallback? onExit}) async {
     if (_isDesktop) {
       _systemTray = SystemTray();
@@ -30,6 +30,16 @@ class AppTrayManager {
     if (!_isDesktop) return;
     _trayIconPath = path;
     if (_isActive) _applyTrayImage();
+  }
+
+  Future<void> updateTooltip(String text) async {
+    if (!_isDesktop) return;
+    _currentTooltip = text;
+    if (_systemTray != null && _isActive) {
+      try {
+        await _systemTray!.setToolTip(text);
+      } catch (_) {}
+    }
   }
 
   Future<void> _applyTrayImage() async {
@@ -55,10 +65,15 @@ class AppTrayManager {
               ? _trayIconPath!
               : fallbackAsset;
 
+      final String initialTooltip = _currentTooltip ?? "SnapDNS";
+
       await _systemTray!.initSystemTray(
-        title: "SnapDns",
+        title: initialTooltip,
         iconPath: initialPath,
       );
+
+      // Force-set the hover tooltip on creation
+      await _systemTray!.setToolTip(initialTooltip);
 
       if (initialPath != _trayIconPath && _trayIconPath != null) {
         await _applyTrayImage();
@@ -68,14 +83,7 @@ class AppTrayManager {
         MenuItemLabel(label: 'Show', onClicked: (_) => _restore()),
         MenuItemLabel(
             label: 'Exit',
-            onClicked: (_) {
-              // FIX: Execute custom exit routine to flush configurations to disk before termination
-              if (_onExit != null) {
-                _onExit!();
-              } else {
-                exit(0);
-              }
-            }),
+            onClicked: (_) => _onExit != null ? _onExit!() : exit(0)),
       ]);
 
       await _systemTray!.setContextMenu(_menu!);

@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
+		<Version>2.0.1</Version>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<RootNamespace>SnapDns.Service</RootNamespace>
@@ -8,7 +9,6 @@
 		<OutputType>Exe</OutputType>
 		<PublishSingleFile>true</PublishSingleFile>
 		
-		<!-- FIX: Configure fully standalone, ultra-slim IL Trimming -->
 		<SelfContained>true</SelfContained>
 		<PublishTrimmed>true</PublishTrimmed>
 		<TrimMode>link</TrimMode>

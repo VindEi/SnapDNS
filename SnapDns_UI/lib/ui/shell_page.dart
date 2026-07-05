@@ -5,6 +5,7 @@ import 'package:window_manager/window_manager.dart';
 import '../providers/settings_provider.dart';
 import '../services/update_service.dart';
 import '../providers/toast_provider.dart';
+import '../services/tray_manager.dart';
 import 'pages/main_page.dart';
 import 'pages/profiles_page.dart';
 import 'pages/settings_page.dart';
@@ -38,7 +39,6 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
     Future.delayed(
         const Duration(seconds: 3), () => _checkForUpdates(silent: true));
 
-    // FIX 3: Trigger the icon generation safely after the first frame has rendered!
     if (isDesktop) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         context.read<SettingsProvider>().refreshSystemIcons();
@@ -73,6 +73,15 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
   @override
   void onWindowClose() {
     context.read<SettingsProvider>().handleWindowClose();
+  }
+
+  @override
+  void onWindowFocus() {
+    if (isDesktop) {
+      try {
+        AppTrayManager().hideTray();
+      } catch (_) {}
+    }
   }
 
   @override
