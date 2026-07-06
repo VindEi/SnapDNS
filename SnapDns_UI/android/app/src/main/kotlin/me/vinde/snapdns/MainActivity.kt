@@ -15,20 +15,22 @@ class MainActivity: FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startVpn" -> {
+                    val primary = call.argument<String>("primaryDns") ?: "1.1.1.1"
+                    val secondary = call.argument<String>("secondaryDns")
+                    val privateDns = call.argument<String>("privateDns")
+                    val dohUrl = call.argument<String>("dohUrl")
+                    val hostName = call.argument<String>("hostName")
+                    val resolvedIps: List<String>? = call.argument<List<String>>("resolvedIps")
+
+                    // FIX: Save configurations immediately so they can be retrieved after the UAC prompt
+                    savePrefs(primary, secondary, privateDns, dohUrl, hostName, resolvedIps)
+
                     val intent = VpnService.prepare(this)
                     if (intent != null) {
                         startActivityForResult(intent, 0)
                         result.success(false)
                     } else {
-                        val resolvedIps: List<String>? = call.argument<List<String>>("resolvedIps")
-                        startDnsVpn(
-                            call.argument<String>("primaryDns") ?: "1.1.1.1",
-                            call.argument<String>("secondaryDns"),
-                            call.argument<String>("privateDns"),
-                            call.argument<String>("dohUrl"),
-                            call.argument<String>("hostName"),
-                            resolvedIps
-                        )
+                        startDnsVpn(primary, secondary, privateDns, dohUrl, hostName, resolvedIps)
                         result.success(true)
                     }
                 }
@@ -44,7 +46,24 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    private fun startDnsVpn(primary: String, secondary: String?, privateDns: String?, dohUrl: String?, hostName: String?, resolvedIps: List<String>?) {
+    // FIX: Automatically start the VPN as soon as first-time authorization is approved
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 0 && resultCode == RESULT_OK) {
+            val prefs = getSharedPreferences("SnapDnsPrefs", MODE_PRIVATE)
+            val primary = prefs.getString("primaryDns", "1.1.1.1") ?: "1.1.1.1"
+            val secondary = prefs.getString("secondaryDns", null)
+            val privateDns = prefs.getString("privateDns", null)
+            val dohUrl = prefs.getString("dohUrl", null)
+            val hostName = prefs.getString("hostName", null)
+            val resolvedIpsSet = prefs.getStringSet("resolvedIps", null)
+            val resolvedIps = resolvedIpsSet?.let { ArrayList(it) }
+
+            startDnsVpn(primary, secondary, privateDns, dohUrl, hostName, resolvedIps)
+        }
+    }
+
+    private fun savePrefs(primary: String, secondary: String?, privateDns: String?, dohUrl: String?, hostName: String?, resolvedIps: List<String>?) {
         val prefs = getSharedPreferences("SnapDnsPrefs", MODE_PRIVATE)
         prefs.edit().apply {
             putString("primaryDns", primary)
@@ -59,7 +78,9 @@ class MainActivity: FlutterActivity() {
             }
             apply()
         }
+    }
 
+    private fun startDnsVpn(primary: String, secondary: String?, privateDns: String?, dohUrl: String?, hostName: String?, resolvedIps: List<String>?) {
         val serviceIntent = Intent(this, DnsVpnService::class.java).apply {
             putExtra("primaryDns", primary)
             putExtra("secondaryDns", secondary)

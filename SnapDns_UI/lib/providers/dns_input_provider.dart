@@ -114,7 +114,7 @@ class DnsInputProvider extends ChangeNotifier {
     }
   }
 
-  // FIX: Complete input validation covering both primary and secondary fields.
+  // FIX: Implemented strict IP type matching to verify IPv4 in IPv4 fields and IPv6 in IPv6 fields
   bool get isInputValid {
     if (activeMode == DnsInputMode.link) {
       final text = activeSecureType == SecureType.doh
@@ -129,9 +129,18 @@ class DnsInputProvider extends ChangeNotifier {
           ? s4Controller.text.trim()
           : s6Controller.text.trim();
 
-      final primaryValid = InternetAddress.tryParse(primary) != null;
-      final secondaryValid =
-          secondary.isEmpty || InternetAddress.tryParse(secondary) != null;
+      final primaryAddr = InternetAddress.tryParse(primary);
+      final secondaryAddr =
+          secondary.isEmpty ? null : InternetAddress.tryParse(secondary);
+
+      final expectedType = activeIpType == IpType.v4
+          ? InternetAddressType.IPv4
+          : InternetAddressType.IPv6;
+
+      final primaryValid =
+          primaryAddr != null && primaryAddr.type == expectedType;
+      final secondaryValid = secondary.isEmpty ||
+          (secondaryAddr != null && secondaryAddr.type == expectedType);
 
       return primaryValid && secondaryValid;
     }

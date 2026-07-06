@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import java.util.ArrayList
 
 class SnapDnsTileService : TileService() {
 
@@ -26,19 +27,28 @@ class SnapDnsTileService : TileService() {
             val secondary = prefs.getString("secondaryDns", null)
             val privateDns = prefs.getString("privateDns", null)
             val dohUrl = prefs.getString("dohUrl", null)
+            
+            // FIX: Load pre-resolved host details to prevent loopback deadlocks on Quick Tile toggles
+            val hostName = prefs.getString("hostName", null)
+            val resolvedIpsSet = prefs.getStringSet("resolvedIps", null)
+            val resolvedIps = resolvedIpsSet?.let { ArrayList(it) }
 
             val startIntent = Intent(this, DnsVpnService::class.java).apply {
                 putExtra("primaryDns", primary)
                 putExtra("secondaryDns", secondary)
                 putExtra("privateDns", privateDns)
                 putExtra("dohUrl", dohUrl)
+                putExtra("hostName", hostName)
+                if (resolvedIps != null) {
+                    putStringArrayListExtra("resolvedIps", resolvedIps)
+                }
             }
             startService(startIntent)
         }
 
         try {
             Thread.sleep(150)
-        } catch (e: Exception) { 
+        } catch (e: Exception) {
             // Handled
         }
         

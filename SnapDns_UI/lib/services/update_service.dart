@@ -22,7 +22,13 @@ class UpdateInfo {
 }
 
 class UpdateService {
+  // the live update check, download progress, and installer launch.
+  static const bool mockUpdateForTesting = false;
+
   static Future<UpdateInfo?> checkUpdate() async {
+    final String currentVersion =
+        mockUpdateForTesting ? "2.0.0" : AppConstants.appVersion;
+
     try {
       final response = await http.get(
         Uri.parse(
@@ -36,10 +42,9 @@ class UpdateService {
         final latestVersion = tag.replaceAll('v', '');
         final releasePageUrl = json['html_url'] as String;
 
-        if (_isNewerVersion(AppConstants.appVersion, latestVersion)) {
+        if (_isNewerVersion(currentVersion, latestVersion)) {
           String? winExeUrl;
 
-          // Only look for the .exe file for Windows auto-installation
           for (var asset in json['assets']) {
             final name = asset['name'].toString().toLowerCase();
             if (name.endsWith('.exe')) {
@@ -76,7 +81,6 @@ class UpdateService {
 
   static Future<void> performUpdate(BuildContext context, UpdateInfo info,
       Function(double) onProgress) async {
-    // 1. WINDOWS: Direct Download & Execution
     if (Platform.isWindows && info.windowsExeUrl != null) {
       try {
         final tempDir = await getTemporaryDirectory();
@@ -99,11 +103,8 @@ class UpdateService {
         await sink.flush();
         await sink.close();
 
-        // FIX: Spawn the installer as a completely detached process.
-        // This prevents synchronous deadlocks, allowing our Flutter app to terminate and release file locks immediately.
         await Process.start(savePath, [], mode: ProcessStartMode.detached);
 
-        // Shutdown app to allow overwrite
         try {
           await AppTrayManager()
               .hideTray()
@@ -112,13 +113,10 @@ class UpdateService {
         exit(0);
       } catch (e) {
         debugPrint("Windows Update Failed: $e");
-        // Fallback to browser if download fails
         await launchUrl(Uri.parse(info.releasePageUrl),
             mode: LaunchMode.externalApplication);
       }
-    }
-    // 2. ANDROID / MAC / LINUX: Redirect to Release Page
-    else {
+    } else {
       await launchUrl(Uri.parse(info.releasePageUrl),
           mode: LaunchMode.externalApplication);
     }
