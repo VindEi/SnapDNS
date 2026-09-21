@@ -31,9 +31,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _onSettingsChanged() {
     final s = context.read<SettingsProvider>();
-
-    // FIX: Normalize both strings by stripping '#' and converting them to uppercase.
-    // This prevents the controller from redundant redraws, preserving your cursor focus and position while typing.
     final currentInput =
         _hexController.text.replaceFirst('#', '').toUpperCase();
     final previewInput = s.customHexPreview.replaceFirst('#', '').toUpperCase();
@@ -140,7 +137,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: _actionBtn(
                   "EXPORT",
                   Icons.upload_rounded,
-                  () => s.exportProfiles(jsonEncode(dns.profiles)),
+                  () async {
+                    final jsonString = jsonEncode(
+                        dns.profiles.map((p) => p.toJson()).toList());
+                    final success = await s.exportProfiles(jsonString);
+                    if (context.mounted && success) {
+                      context
+                          .read<ToastProvider>()
+                          .showToast("PROFILES EXPORTED");
+                    }
+                  },
                   accent,
                   colorScheme,
                 ),
@@ -151,11 +157,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   "IMPORT",
                   Icons.download_rounded,
                   () => s.importProfiles((data) {
-                    if (mounted) {
-                      dns.smartImport(
-                        DnsIntelligence.parseHumanText(data) ??
-                            DnsConfiguration(name: "Imported"),
-                      );
+                    if (context.mounted) {
+                      context.read<DnsProvider>().importProfilesFromData(data);
                     }
                   }),
                   accent,
@@ -248,11 +251,11 @@ class _SettingsPageState extends State<SettingsPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _adaptiveCircle(s),
-              _colorCircle(s, const Color(0xFF00C8C8)), // Cyan
-              _colorCircle(s, const Color(0xFFFF9500)), // Orange
-              _colorCircle(s, const Color(0xFFAF52DE)), // Purple
-              _colorCircle(s, const Color(0xFFFF2D55)), // Pink
-              _customHexCircle(s), // Custom
+              _colorCircle(s, const Color(0xFF00C8C8)),
+              _colorCircle(s, const Color(0xFFFF9500)),
+              _colorCircle(s, const Color(0xFFAF52DE)),
+              _colorCircle(s, const Color(0xFFFF2D55)),
+              _customHexCircle(s),
             ],
           ),
           const SizedBox(height: 16),
@@ -307,7 +310,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _customHexCircle(SettingsProvider s) {
     Color liveColor = HexColor.fromHex(s.customHexPreview);
-    bool isSelected = s.isCustomColor; // Only checked if it's NOT a preset!
+    bool isSelected = s.isCustomColor;
     return InkWell(
       onTap: () => s.applyCustomHex(),
       borderRadius: BorderRadius.circular(20),

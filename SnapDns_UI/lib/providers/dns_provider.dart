@@ -119,7 +119,6 @@ class DnsProvider extends ChangeNotifier {
         }
       }
     } catch (_) {
-      // Safe boundary catch
     } finally {
       _isRefreshing = false;
       notifyListeners();
@@ -289,6 +288,49 @@ class DnsProvider extends ChangeNotifier {
         _toastProvider.showToast("ACCESS DENIED");
       }
     }
+  }
+
+  int importProfilesFromData(String data) {
+    final imported = DnsIntelligence.parseImportData(data);
+    if (imported.isEmpty) {
+      _toastProvider.showToast("NO VALID DATA FOUND");
+      return 0;
+    }
+
+    int addedCount = 0;
+    int updatedCount = 0;
+
+    for (var profile in imported) {
+      final index = _profiles.indexWhere((p) => p.id == profile.id);
+      if (index != -1) {
+        _profiles[index] = profile;
+        updatedCount++;
+      } else {
+        final exists = _profiles.any((p) =>
+            p.name == profile.name &&
+            p.primaryDns == profile.primaryDns &&
+            p.dohUrl == profile.dohUrl &&
+            p.dotHostname == profile.dotHostname);
+
+        if (!exists) {
+          _profiles.add(profile);
+          addedCount++;
+        }
+      }
+    }
+
+    ProfileStorage.save(_profiles);
+    notifyListeners();
+
+    final total = addedCount + updatedCount;
+    if (total == 0) {
+      _toastProvider.showToast("PROFILES ALREADY EXIST");
+    } else {
+      _toastProvider.showToast(
+          total == 1 ? "IMPORTED 1 PROFILE" : "IMPORTED $total PROFILES");
+    }
+
+    return total;
   }
 
   void smartImport(DnsConfiguration? suggested) {

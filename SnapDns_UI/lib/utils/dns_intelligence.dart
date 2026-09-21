@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../models/dns_configuration.dart';
 
 class DnsIntelligence {
@@ -40,6 +41,45 @@ class DnsIntelligence {
     ),
   ];
 
+  // Parses exported JSON arrays, single JSON profiles, or unstructured text snippets
+  static List<DnsConfiguration> parseImportData(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return [];
+
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          final List<DnsConfiguration> list = [];
+          for (var item in decoded) {
+            if (item is Map<String, dynamic>) {
+              list.add(DnsConfiguration.fromJson(item));
+            } else if (item is Map) {
+              list.add(
+                  DnsConfiguration.fromJson(Map<String, dynamic>.from(item)));
+            }
+          }
+          if (list.isNotEmpty) return list;
+        } else if (decoded is Map<String, dynamic>) {
+          return [DnsConfiguration.fromJson(decoded)];
+        } else if (decoded is Map) {
+          return [
+            DnsConfiguration.fromJson(Map<String, dynamic>.from(decoded))
+          ];
+        }
+      } catch (_) {
+        // Fall back to plain text parsing if JSON decoding fails
+      }
+    }
+
+    final single = parseHumanText(trimmed);
+    if (single != null) {
+      return [single];
+    }
+
+    return [];
+  }
+
   static DnsConfiguration? parseHumanText(String input) {
     final ipv4Regex = RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b');
     final ipv6Regex = RegExp(
@@ -61,7 +101,6 @@ class DnsIntelligence {
       return null;
     }
 
-    // FIX: Trim all parsed regex outputs to prevent capturing whitespaces or raw carriage returns
     return DnsConfiguration(
       name: "Imported Profile",
       primaryDns: ipv4s.isNotEmpty ? ipv4s[0].trim() : "",

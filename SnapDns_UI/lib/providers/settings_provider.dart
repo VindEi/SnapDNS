@@ -326,26 +326,55 @@ class SettingsProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> exportProfiles(String json) async {
+  Future<bool> exportProfiles(String json) async {
     try {
-      await FilePicker.saveFile(
-          fileName: 'profiles.json',
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-          bytes: utf8.encode(json));
+      final bytes = utf8.encode(json);
+      final String? outputFile = await FilePicker.saveFile(
+        dialogTitle: 'Export DNS Profiles',
+        fileName: 'profiles.json',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: bytes,
+      );
+
+      if (outputFile != null) {
+        final file = File(outputFile);
+        if (!await file.exists() || await file.length() == 0) {
+          await file.writeAsBytes(bytes, flush: true);
+        }
+        return true;
+      }
     } catch (e) {
       debugPrint("DEBUG: [Settings] Export failed: $e");
     }
+    return false;
   }
 
   Future<void> importProfiles(Function(String) onData) async {
-    FilePickerResult? res = await FilePicker.pickFiles(
-        type: FileType.custom, allowedExtensions: ['json']);
-    if (res != null && res.files.single.path != null) {
-      final content = await File(res.files.single.path!).readAsString();
-      if (content.trim().isNotEmpty) {
-        onData(content);
+    try {
+      final FilePickerResult? res = await FilePicker.pickFiles(
+        dialogTitle: 'Import DNS Profiles',
+        type: FileType.custom,
+        allowedExtensions: ['json', 'txt'],
+        withData: true,
+      );
+
+      if (res != null && res.files.isNotEmpty) {
+        final file = res.files.single;
+        String? content;
+
+        if (file.bytes != null) {
+          content = utf8.decode(file.bytes!);
+        } else if (file.path != null) {
+          content = await File(file.path!).readAsString();
+        }
+
+        if (content != null && content.trim().isNotEmpty) {
+          onData(content);
+        }
       }
+    } catch (e) {
+      debugPrint("DEBUG: [Settings] Import failed: $e");
     }
   }
 }
