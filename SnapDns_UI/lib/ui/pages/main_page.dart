@@ -110,8 +110,7 @@ class MainPage extends StatelessWidget {
                       label: "Connect",
                       onTap: () => _handleConnect(context),
                       backgroundColor: cs.primary,
-                      textColor: cs
-                          .primary.contrastColor, // FIX: Dynamic text contrast!
+                      textColor: cs.primary.contrastColor,
                     )),
                     const SizedBox(width: 12),
                     Expanded(
@@ -134,7 +133,7 @@ class MainPage extends StatelessWidget {
                       isMobileConnected ? Colors.redAccent : cs.primary,
                   textColor: isMobileConnected
                       ? Colors.white
-                      : cs.primary.contrastColor, // FIX: Dynamic text contrast!
+                      : cs.primary.contrastColor,
                 ),
             ],
           ),

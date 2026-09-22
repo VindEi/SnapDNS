@@ -55,6 +55,7 @@ class AdapterPage extends StatelessWidget {
               title: "Automatic Detection",
               subtitle: "Detect and use the primary active interface.",
               isSelected: dns.isAdapterSelected(null),
+              badge: dns.isAdapterSelected(null) ? dns.ipv6Summary : null,
               onTap: () => dns.setSelectedAdapter(null),
             ),
             const SizedBox(height: 32),
@@ -67,10 +68,16 @@ class AdapterPage extends StatelessWidget {
                       itemCount: dns.adapters.length,
                       itemBuilder: (context, index) {
                         final adapter = dns.adapters[index];
+                        final isSelected = dns.isAdapterSelected(adapter);
+                        final isActive =
+                            dns.readableAdapterName.toLowerCase() ==
+                                adapter.toLowerCase();
                         return AdapterTile(
                           title: adapter,
                           subtitle: _getAdapterType(adapter),
-                          isSelected: dns.isAdapterSelected(adapter),
+                          isSelected: isSelected,
+                          badge:
+                              (isSelected || isActive) ? dns.ipv6Summary : null,
                           onTap: () => dns.setSelectedAdapter(adapter),
                         );
                       },

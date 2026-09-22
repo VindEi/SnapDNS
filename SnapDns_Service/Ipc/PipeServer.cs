@@ -15,7 +15,6 @@ public partial class PipeServer(ILogger<PipeServer> logger, SystemDnsService dns
         PropertyNameCaseInsensitive = true
     };
 
-    // FIX: Dynamically resolves Windows Pipe names vs. rooted Unix Domain Socket paths to prevent sandboxing locks
     private static string GetPipeName()
     {
         return OperatingSystem.IsWindows() ? "SnapDns_IPC_v1" : "/var/run/snapdns.sock";
@@ -60,32 +59,28 @@ public partial class PipeServer(ILogger<PipeServer> logger, SystemDnsService dns
 
         if (!OperatingSystem.IsWindows())
         {
-            // Passing a fully rooted path (/var/run/...) tells .NET Core to bypass /tmp/ and create the socket at this exact path
             var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, -1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 
-            // Open up read/write permissions on the Unix Domain Socket so non-root GUI apps can send commands
             if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
             {
                 try
                 {
                     if (File.Exists(pipeName))
                     {
-                        File.SetUnixFileMode(pipeName, 
+                        File.SetUnixFileMode(pipeName,
                             UnixFileMode.UserRead | UnixFileMode.UserWrite |
                             UnixFileMode.GroupRead | UnixFileMode.GroupWrite |
                             UnixFileMode.OtherRead | UnixFileMode.OtherWrite);
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    // Gracefully ignore if the current file system doesn't fully support permission alterations
                 }
             }
             return pipe;
         }
 
         var ps = new PipeSecurity();
-        
         var interactiveSid = new SecurityIdentifier(WellKnownSidType.InteractiveSid, null);
         ps.AddAccessRule(new PipeAccessRule(interactiveSid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
 
@@ -105,7 +100,6 @@ public partial class PipeServer(ILogger<PipeServer> logger, SystemDnsService dns
         string requestJson = await IOHelper.ReadStringAsync(server, ct);
         if (string.IsNullOrWhiteSpace(requestJson)) return;
 
-        // FIX: Utilize the compile-time Source Generation Context for deserialization
         var request = JsonSerializer.Deserialize(requestJson, SourceGenerationContext.Default.PipeRequest);
         if (request == null) return;
 
@@ -117,13 +111,12 @@ public partial class PipeServer(ILogger<PipeServer> logger, SystemDnsService dns
         PipeResponse response = await (request.Command switch
         {
             PipeCommandType.getSyncState => dnsService.GetSyncState(request.AdapterName),
-            PipeCommandType.applyDns => dnsService.ApplyDnsConfiguration(request.AdapterName, request.Configuration!),
+            PipeCommandType.applyDns => dnsService.ApplyDnsConfiguration(request.AdapterName, request.Configuration!, request.DisableIpv6),
             PipeCommandType.resetDhcp => dnsService.ResetToDhcp(request.AdapterName),
             PipeCommandType.flushDns => SystemDnsService.FlushDns(),
             _ => Task.FromResult(new PipeResponse { Success = false, Message = "Forbidden" })
         });
 
-        // FIX: Utilize the compile-time Source Generation Context for serialization
         await IOHelper.WriteStringAsync(server, JsonSerializer.Serialize(response, SourceGenerationContext.Default.PipeResponse), ct);
 
         if (OperatingSystem.IsWindows() && server.IsConnected)

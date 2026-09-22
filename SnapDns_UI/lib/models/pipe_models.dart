@@ -7,25 +7,28 @@ enum PipeCommandType {
   getAdapters,
   getPreferredAdapter,
   flushDns,
-  getSyncState, // Added
+  getSyncState,
 }
 
 class PipeRequest {
   final PipeCommandType command;
   final String adapterName;
   final DnsConfiguration? configuration;
+  final bool disableIpv6;
 
   PipeRequest({
     required this.command,
     this.adapterName = "",
     this.configuration,
+    this.disableIpv6 = false,
   });
 
   Map<String, dynamic> toJson() => {
-    'command': command.name,
-    'adapterName': adapterName,
-    'configuration': configuration?.toJson(),
-  };
+        'command': command.name,
+        'adapterName': adapterName,
+        'configuration': configuration?.toJson(),
+        'disableIpv6': disableIpv6,
+      };
 }
 
 class PipeResponse {
@@ -44,14 +47,14 @@ class PipeResponse {
   });
 
   factory PipeResponse.fromJson(Map<String, dynamic> json) => PipeResponse(
-    success: json['success'] ?? false,
-    message: json['message'] ?? "",
-    configuration: json['configuration'] != null
-        ? DnsConfiguration.fromJson(json['configuration'])
-        : null,
-    adapters: json['adapters'] != null
-        ? List<String>.from(json['adapters'])
-        : null,
-    preferredAdapterName: json['preferredAdapterName'],
-  );
+        success: json['success'] ?? false,
+        message: json['message'] ?? "",
+        configuration: json['configuration'] != null
+            ? DnsConfiguration.fromJson(json['configuration'])
+            : null,
+        adapters: json['adapters'] != null
+            ? List<String>.from(json['adapters'])
+            : null,
+        preferredAdapterName: json['preferredAdapterName'],
+      );
 }

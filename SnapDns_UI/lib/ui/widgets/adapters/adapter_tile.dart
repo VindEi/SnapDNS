@@ -5,6 +5,7 @@ class AdapterTile extends StatefulWidget {
   final String subtitle;
   final bool isSelected;
   final VoidCallback onTap;
+  final String? badge;
 
   const AdapterTile({
     super.key,
@@ -12,6 +13,7 @@ class AdapterTile extends StatefulWidget {
     required this.subtitle,
     required this.isSelected,
     required this.onTap,
+    this.badge,
   });
 
   @override
@@ -77,16 +79,53 @@ class _AdapterTileState extends State<AdapterTile> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.title.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: widget.isSelected
-                            ? accent
-                            : colorScheme.onSurface.withValues(alpha: 0.8),
-                        letterSpacing: 0.5,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          widget.title.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: widget.isSelected
+                                ? accent
+                                : colorScheme.onSurface.withValues(alpha: 0.8),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        if (widget.badge != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: widget.isSelected
+                                  ? accent.withValues(alpha: 0.15)
+                                  : colorScheme.onSurface
+                                      .withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: widget.isSelected
+                                    ? accent.withValues(alpha: 0.3)
+                                    : colorScheme.outline
+                                        .withValues(alpha: 0.1),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              widget.badge!,
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                                color: widget.isSelected
+                                    ? accent
+                                    : colorScheme.onSurface
+                                        .withValues(alpha: 0.4),
+                                fontFamily: 'Consolas',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(

@@ -30,6 +30,7 @@ class DnsProvider extends ChangeNotifier {
   String? _manualAdapterId, _autoHardwareId;
   String systemPrimary = "---";
   bool systemIsDoh = false;
+  String systemIpv6Status = "OFF";
 
   DnsConfiguration? _activeMobileConfig;
 
@@ -40,6 +41,19 @@ class DnsProvider extends ChangeNotifier {
 
   String smartProviderName = "DISCONNECTED";
   List<String> smartDnsValues = ["---"];
+
+  String get ipv6Summary {
+    switch (systemIpv6Status) {
+      case "DHCP":
+        return "IPv6: DHCP";
+      case "STATIC":
+        return "IPv6: Static";
+      case "BYPASS":
+        return "IPv6: Purged";
+      default:
+        return "IPv6: None";
+    }
+  }
 
   Future<void> initialize() async {
     _profiles.addAll(await ProfileStorage.load());
@@ -115,7 +129,7 @@ class DnsProvider extends ChangeNotifier {
         } else {
           systemPrimary = "AUTO";
           smartDnsValues = ["AUTO"];
-          smartProviderName = "DISCONNECTED";
+          smartProviderName = "SYSTEM DEFAULT (DHCP)";
         }
       }
     } catch (_) {
@@ -133,28 +147,55 @@ class DnsProvider extends ChangeNotifier {
             ? "AUTO"
             : cfg.primaryDns);
 
-    smartProviderName = "CUSTOM RESOLVER";
-    String protocol = "IP";
-
     if (systemIsDoh) {
-      protocol = cfg.dohUrl.isNotEmpty ? "DoH" : "DoT";
+      systemIpv6Status = "BYPASS";
+    } else if (cfg.ipv6Primary == "DHCP") {
+      systemIpv6Status = "DHCP";
+    } else if (cfg.ipv6Primary.isNotEmpty) {
+      systemIpv6Status = "STATIC";
+    } else {
+      systemIpv6Status = "OFF";
     }
 
-    for (var p in _profiles) {
-      if ((systemIsDoh &&
-              (p.dohUrl == systemPrimary || p.dotHostname == systemPrimary)) ||
-          (!systemIsDoh && p.primaryDns == systemPrimary)) {
-        smartProviderName = p.name.toUpperCase();
-        if (p.dohUrl.isNotEmpty && systemIsDoh) {
-          protocol = "DoH";
-        } else if (p.dotHostname.isNotEmpty && systemIsDoh) {
-          protocol = "DoT";
-        } else if (p.ipv6Primary.isNotEmpty) {
-          protocol = "IPv6";
-        } else {
-          protocol = "IPv4";
+    if (systemPrimary == "AUTO") {
+      smartProviderName = "SYSTEM DEFAULT (DHCP)";
+      if (isDesktop) {
+        AppTrayManager().updateTooltip("System Default (DHCP)");
+      }
+    } else {
+      smartProviderName =
+          cfg.name == "DHCP" ? "SYSTEM DEFAULT (DHCP)" : "CUSTOM RESOLVER";
+      String protocol = "IP";
+
+      if (systemIsDoh) {
+        protocol = cfg.dohUrl.isNotEmpty ? "DoH" : "DoT";
+      }
+
+      for (var p in _profiles) {
+        if ((systemIsDoh &&
+                (p.dohUrl == systemPrimary ||
+                    p.dotHostname == systemPrimary)) ||
+            (!systemIsDoh && p.primaryDns == systemPrimary)) {
+          smartProviderName = p.name.toUpperCase();
+          if (p.dohUrl.isNotEmpty && systemIsDoh) {
+            protocol = "DoH";
+          } else if (p.dotHostname.isNotEmpty && systemIsDoh) {
+            protocol = "DoT";
+          } else if (p.ipv6Primary.isNotEmpty) {
+            protocol = "IPv6";
+          } else {
+            protocol = "IPv4";
+          }
+          break;
         }
-        break;
+      }
+
+      if (isDesktop) {
+        final String displayName = smartProviderName == "CUSTOM RESOLVER"
+            ? "Custom"
+            : smartProviderName[0] +
+                smartProviderName.substring(1).toLowerCase();
+        AppTrayManager().updateTooltip("$displayName ($protocol)");
       }
     }
 
@@ -175,19 +216,13 @@ class DnsProvider extends ChangeNotifier {
     }
 
     smartDnsValues = [cleanDisplayValue];
-
-    if (isDesktop) {
-      final String displayName = smartProviderName == "CUSTOM RESOLVER"
-          ? "Custom"
-          : smartProviderName[0] + smartProviderName.substring(1).toLowerCase();
-      AppTrayManager().updateTooltip("$displayName ($protocol)");
-    }
   }
 
   Future<void> connectDns(
       DnsConfiguration config, SettingsProvider settings) async {
     _toastProvider.showToast("APPLYING...");
-    final res = await _engine.connect(config, readableAdapterName);
+    final res = await _engine.connect(config, readableAdapterName,
+        disableIpv6: settings.disableIpv6);
 
     if (isDesktop) {
       if (res.success) {
@@ -227,7 +262,7 @@ class DnsProvider extends ChangeNotifier {
         _activeMobileConfig = null;
         systemPrimary = "AUTO";
         smartDnsValues = ["AUTO"];
-        smartProviderName = "DISCONNECTED";
+        smartProviderName = "SYSTEM DEFAULT (DHCP)";
 
         try {
           final activeFile =

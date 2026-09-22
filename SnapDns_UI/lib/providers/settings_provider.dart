@@ -67,6 +67,7 @@ class SettingsProvider extends ChangeNotifier {
   bool get autoFlush => _settings.autoFlush;
   bool get launchHidden => _settings.launchHidden;
   bool get verifyConnection => _settings.verifyConnection;
+  bool get disableIpv6 => _settings.disableIpv6;
   bool get isDarkMode => _settings.theme == "Dark";
 
   bool get isAdaptive => _settings.accentColor == "adaptive";
@@ -154,6 +155,12 @@ class SettingsProvider extends ChangeNotifier {
 
   void toggleVerify(bool v) {
     _settings.verifyConnection = v;
+    _save();
+    notifyListeners();
+  }
+
+  void toggleDisableIpv6(bool v) {
+    _settings.disableIpv6 = v;
     _save();
     notifyListeners();
   }
@@ -356,17 +363,19 @@ class SettingsProvider extends ChangeNotifier {
         dialogTitle: 'Import DNS Profiles',
         type: FileType.custom,
         allowedExtensions: ['json', 'txt'],
-        withData: true,
       );
 
       if (res != null && res.files.isNotEmpty) {
         final file = res.files.single;
         String? content;
 
-        if (file.bytes != null) {
-          content = utf8.decode(file.bytes!);
-        } else if (file.path != null) {
-          content = await File(file.path!).readAsString();
+        try {
+          final bytes = await file.readAsBytes();
+          content = utf8.decode(bytes);
+        } catch (_) {
+          if (file.path != null) {
+            content = await File(file.path!).readAsString();
+          }
         }
 
         if (content != null && content.trim().isNotEmpty) {

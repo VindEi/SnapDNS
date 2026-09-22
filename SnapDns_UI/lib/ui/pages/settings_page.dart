@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../utils/dns_intelligence.dart';
-import '../../models/dns_configuration.dart';
 import '../../services/mobile_vpn_engine.dart';
 import '../../services/update_service.dart';
 import '../../providers/toast_provider.dart';
@@ -31,6 +29,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _onSettingsChanged() {
     final s = context.read<SettingsProvider>();
+
     final currentInput =
         _hexController.text.replaceFirst('#', '').toUpperCase();
     final previewInput = s.customHexPreview.replaceFirst('#', '').toUpperCase();
@@ -103,11 +102,28 @@ class _SettingsPageState extends State<SettingsPage> {
               value: s.showNotifications,
               onChanged: s.toggleNotifications,
             ),
+          ]),
+          const SizedBox(height: 24),
+          const _Label(text: "NETWORK"),
+          _Card([
+            if (s.isDesktop)
+              SettingsSwitch(
+                title: "Disable IPv6 on Interface",
+                subtitle: "Prevent IPv6 leaks.",
+                value: s.disableIpv6,
+                onChanged: s.toggleDisableIpv6,
+              ),
             SettingsSwitch(
               title: "Auto Flush Cache",
-              subtitle: "Clear system DNS cache on successful connection.",
+              subtitle: "Clear DNS cache on connection.",
               value: s.autoFlush,
               onChanged: s.toggleAutoFlush,
+            ),
+            _listTile(
+              "Manual Cache Flush",
+              Icons.cleaning_services_rounded,
+              dns.flushDns,
+              colorScheme,
             ),
           ]),
           const SizedBox(height: 24),
@@ -141,7 +157,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     final jsonString = jsonEncode(
                         dns.profiles.map((p) => p.toJson()).toList());
                     final success = await s.exportProfiles(jsonString);
-                    if (context.mounted && success) {
+                    if (mounted && success) {
                       context
                           .read<ToastProvider>()
                           .showToast("PROFILES EXPORTED");
@@ -157,7 +173,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   "IMPORT",
                   Icons.download_rounded,
                   () => s.importProfiles((data) {
-                    if (context.mounted) {
+                    if (mounted) {
                       context.read<DnsProvider>().importProfilesFromData(data);
                     }
                   }),
@@ -170,8 +186,6 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 24),
           const _Label(text: "TROUBLESHOOTING"),
           _Card([
-            _listTile("Manual Cache Flush", Icons.cleaning_services_rounded,
-                dns.flushDns, colorScheme),
             if (s.isDesktop)
               _listTile("Restart System Service", Icons.refresh_rounded,
                   dns.restartService, colorScheme),

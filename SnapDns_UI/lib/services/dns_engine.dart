@@ -29,12 +29,10 @@ abstract class DnsEngine {
   }
 
   Future<void> initialize();
-  Future<PipeResponse> connect(DnsConfiguration config, String adapterName);
+  Future<PipeResponse> connect(DnsConfiguration config, String adapterName,
+      {bool disableIpv6 = false});
   Future<bool> disconnect(String adapterName);
-
-  // FIX: Changed return type from void to bool to track native success states
   Future<bool> flush();
-
   Future<DnsEngineState> getStatus(String adapterName);
 }
 
@@ -45,12 +43,13 @@ class DesktopDnsEngine implements DnsEngine {
   Future<void> initialize() async {}
 
   @override
-  Future<PipeResponse> connect(
-      DnsConfiguration config, String adapterName) async {
+  Future<PipeResponse> connect(DnsConfiguration config, String adapterName,
+      {bool disableIpv6 = false}) async {
     return await _ipc.sendCommand(PipeRequest(
       command: PipeCommandType.applyDns,
       configuration: config,
       adapterName: adapterName,
+      disableIpv6: disableIpv6,
     ));
   }
 
@@ -65,7 +64,6 @@ class DesktopDnsEngine implements DnsEngine {
 
   @override
   Future<bool> flush() async {
-    // FIX: Propagate the IPC pipeline success state to the UI provider
     final res =
         await _ipc.sendCommand(PipeRequest(command: PipeCommandType.flushDns));
     return res.success;
@@ -92,8 +90,8 @@ class MobileDnsEngine implements DnsEngine {
   Future<void> initialize() async {}
 
   @override
-  Future<PipeResponse> connect(
-      DnsConfiguration config, String adapterName) async {
+  Future<PipeResponse> connect(DnsConfiguration config, String adapterName,
+      {bool disableIpv6 = false}) async {
     bool success = await MobileVpnEngine.startDnsTunnel(config);
     return PipeResponse(
         success: success,

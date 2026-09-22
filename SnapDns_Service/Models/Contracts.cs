@@ -22,7 +22,7 @@ public enum PipeCommandType
     getAdapters,
     getPreferredAdapter,
     flushDns,
-    getSyncState 
+    getSyncState
 }
 
 public class PipeRequest
@@ -31,6 +31,7 @@ public class PipeRequest
     public PipeCommandType Command { get; set; }
     public string AdapterName { get; set; } = string.Empty;
     public DnsConfiguration? Configuration { get; set; }
+    public bool DisableIpv6 { get; set; }
 }
 
 public class PipeResponse
@@ -43,7 +44,7 @@ public class PipeResponse
 }
 
 [JsonSourceGenerationOptions(
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, 
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true,
     GenerationMode = JsonSourceGenerationMode.Default)]
 [JsonSerializable(typeof(PipeRequest))]
