@@ -38,18 +38,16 @@ class IconEngine {
       String processed = applyColors(rawSvg, fillHex, strokeHex);
 
       if (Platform.isWindows) {
-        // FIX: Utilize hashed names to prevent write violations on OS-locked files during runtime theme transitions.
         final String cleanHex = fillHex.replaceFirst('#', '');
         final String iconName =
             'app_icon_${cleanHex}_${isDark ? "dark" : "light"}.ico';
         final String icoPath = p.join(iconDirPath, iconName);
 
         if (!File(icoPath).existsSync()) {
-          final Uint8List icoBytes =
-              await _generateProperIco(processed, [16, 24, 32, 48, 64, 256]);
+          final Uint8List icoBytes = await _generateProperIco(
+              processed, [256, 128, 64, 48, 32, 24, 16]);
           File(icoPath).writeAsBytesSync(icoBytes, flush: true);
 
-          // Safely prune old, unlocked icons in the background to prevent storage leaks
           try {
             final List<FileSystemEntity> files = iconDir.listSync();
             for (var file in files) {
@@ -59,9 +57,7 @@ class IconEngine {
                 await file.delete();
               }
             }
-          } catch (_) {
-            // Ignore locked deletions; they will be removed on subsequent sweeps when released
-          }
+          } catch (_) {}
         }
 
         return {'tray': icoPath, 'taskbar': icoPath};
@@ -90,7 +86,7 @@ class IconEngine {
       c.drawPicture(pictureInfo.picture);
       final ui.Image rendered = await rec.endRecording().toImage(dim, dim);
 
-      if (dim == 256) {
+      if (dim >= 128) {
         final byteData =
             await rendered.toByteData(format: ui.ImageByteFormat.png);
         imageData.add(byteData!.buffer.asUint8List());
@@ -127,9 +123,9 @@ class IconEngine {
             int b = rgba[srcIndex + 2];
             int a = rgba[srcIndex + 3];
 
-            dib[offset++] = (b * a) ~/ 255;
-            dib[offset++] = (g * a) ~/ 255;
-            dib[offset++] = (r * a) ~/ 255;
+            dib[offset++] = b;
+            dib[offset++] = g;
+            dib[offset++] = r;
             dib[offset++] = a;
           }
         }
