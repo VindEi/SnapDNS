@@ -9,29 +9,58 @@ class DnsInputStack extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final accent = colorScheme.primary;
-    final input = context
-        .watch<DnsInputProvider>(); // Watching the isolated UI State only!
+    final input = context.watch<DnsInputProvider>();
+    final bool isWide = MediaQuery.of(context).size.width >= 600 ||
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       child: input.activeMode == DnsInputMode.ip
-          ? Row(
-              key: ValueKey("ip_${input.activeIpType}"),
-              children: [
-                Expanded(
-                    child: _buildField(
+          ? (isWide
+              ? Column(
+                  key: ValueKey("ip_stacked_${input.activeIpType}"),
+                  children: [
+                    _buildField(
+                      input.activeIpType == IpType.v4
+                          ? "Primary IPv4"
+                          : "Primary IPv6",
+                      input.primaryController,
+                      accent,
+                      colorScheme,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildField(
+                      "Backup (Optional)",
+                      input.secondaryController,
+                      accent,
+                      colorScheme,
+                    ),
+                  ],
+                )
+              : Row(
+                  key: ValueKey("ip_row_${input.activeIpType}"),
+                  children: [
+                    Expanded(
+                      child: _buildField(
                         input.activeIpType == IpType.v4
                             ? "Primary IPv4"
                             : "Primary IPv6",
                         input.primaryController,
                         accent,
-                        colorScheme)),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: _buildField("Backup (Opt)",
-                        input.secondaryController, accent, colorScheme)),
-              ],
-            )
+                        colorScheme,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildField(
+                        "Backup (Opt)",
+                        input.secondaryController,
+                        accent,
+                        colorScheme,
+                      ),
+                    ),
+                  ],
+                ))
           : _buildField(
               input.activeSecureType == SecureType.doh
                   ? "DoH URL (https://...)"

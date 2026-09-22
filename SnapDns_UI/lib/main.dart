@@ -7,7 +7,7 @@ import 'core/constants.dart';
 import 'services/tray_manager.dart';
 import 'services/mobile_vpn_engine.dart';
 import 'providers/toast_provider.dart';
-import 'services/single_instance.dart'; // Re-added the import
+import 'services/single_instance.dart';
 import 'providers/dns_provider.dart';
 import 'providers/dns_input_provider.dart';
 import 'providers/settings_provider.dart';
@@ -50,10 +50,14 @@ void main(List<String> args) async {
       exit(0);
     });
 
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(400, 600),
-      minimumSize: Size(400, 600),
-      maximumSize: Size(400, 600),
+    final bool isWide = settingsProvider.isWideMode;
+    final Size initialSize =
+        isWide ? const Size(800, 480) : const Size(400, 600);
+
+    WindowOptions windowOptions = WindowOptions(
+      size: initialSize,
+      minimumSize: initialSize,
+      maximumSize: initialSize,
       center: true,
       backgroundColor: Colors.transparent,
       titleBarStyle: TitleBarStyle.hidden,

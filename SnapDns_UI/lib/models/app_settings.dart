@@ -6,6 +6,7 @@ class AppSettings {
   bool launchHidden;
   bool verifyConnection;
   bool disableIpv6;
+  bool isWideMode;
   String theme;
   String accentColor;
   String customHex;
@@ -18,6 +19,7 @@ class AppSettings {
     this.launchHidden = false,
     this.verifyConnection = false,
     this.disableIpv6 = false,
+    this.isWideMode = false,
     this.theme = "Dark",
     this.accentColor = "#00C8C8",
     this.customHex = "#00C8C8",
@@ -31,6 +33,7 @@ class AppSettings {
         'launchHidden': launchHidden,
         'verifyConnection': verifyConnection,
         'disableIpv6': disableIpv6,
+        'isWideMode': isWideMode,
         'theme': theme,
         'accentColor': accentColor,
         'customHex': customHex,
@@ -44,6 +47,7 @@ class AppSettings {
         launchHidden: json['launchHidden'] ?? false,
         verifyConnection: json['verifyConnection'] ?? false,
         disableIpv6: json['disableIpv6'] ?? false,
+        isWideMode: json['isWideMode'] ?? false,
         theme: json['theme'] ?? "Dark",
         accentColor: json['accentColor'] ?? "#00C8C8",
         customHex: json['customHex'] ?? "#00C8C8",

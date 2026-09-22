@@ -55,193 +55,210 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        children: [
-          const _Label(text: "GENERAL"),
-          _Card([
-            SettingsSwitch(
-              title: s.isDesktop ? "Run on Startup" : "Auto-Connect on Boot",
-              subtitle: s.isDesktop
-                  ? "Start SnapDns with the system."
-                  : "Connect DNS automatically when phone starts.",
-              value: s.runOnStartup,
-              onChanged: s.toggleRunOnStartup,
-            ),
-            if (s.isDesktop) ...[
-              AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                child: s.runOnStartup
-                    ? SettingsSwitch(
-                        title: "Launch Hidden",
-                        subtitle: "Start silently on boot.",
-                        value: s.launchHidden,
-                        onChanged: s.toggleLaunchHidden,
-                        isSubOption: true,
-                      )
-                    : const SizedBox(width: double.infinity, height: 0),
-              ),
-              SettingsSwitch(
-                title: "Minimize to Tray",
-                subtitle: "Keep app running when closed.",
-                value: s.minimizeToTray,
-                onChanged: s.toggleTray,
-              ),
-            ],
-            if (!s.isDesktop)
-              _listTile(
-                "Always-On VPN Settings",
-                Icons.vpn_lock_rounded,
-                () => MobileVpnEngine.openVpnSettings(),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            children: [
+              const _Label(text: "GENERAL"),
+              _Card([
+                SettingsSwitch(
+                  title:
+                      s.isDesktop ? "Run on Startup" : "Auto-Connect on Boot",
+                  subtitle: s.isDesktop
+                      ? "Start SnapDns with the system."
+                      : "Connect DNS automatically when phone starts.",
+                  value: s.runOnStartup,
+                  onChanged: s.toggleRunOnStartup,
+                ),
+                if (s.isDesktop) ...[
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    child: s.runOnStartup
+                        ? SettingsSwitch(
+                            title: "Launch Hidden",
+                            subtitle: "Start silently on boot.",
+                            value: s.launchHidden,
+                            onChanged: s.toggleLaunchHidden,
+                            isSubOption: true,
+                          )
+                        : const SizedBox(width: double.infinity, height: 0),
+                  ),
+                  SettingsSwitch(
+                    title: "Minimize to Tray",
+                    subtitle: "Keep app running when closed.",
+                    value: s.minimizeToTray,
+                    onChanged: s.toggleTray,
+                  ),
+                ],
+                if (!s.isDesktop)
+                  _listTile(
+                    "Always-On VPN Settings",
+                    Icons.vpn_lock_rounded,
+                    () => MobileVpnEngine.openVpnSettings(),
+                    colorScheme,
+                  ),
+                SettingsSwitch(
+                  title: "Show Notifications",
+                  subtitle: "Alert on status changes.",
+                  value: s.showNotifications,
+                  onChanged: s.toggleNotifications,
+                ),
+              ]),
+              const SizedBox(height: 24),
+              const _Label(text: "NETWORK"),
+              _Card([
+                if (s.isDesktop)
+                  SettingsSwitch(
+                    title: "Disable IPv6 on Interface",
+                    subtitle: "Prevent IPv6 leaks .",
+                    value: s.disableIpv6,
+                    onChanged: s.toggleDisableIpv6,
+                  ),
+                SettingsSwitch(
+                  title: "Auto Flush Cache",
+                  subtitle: "Clear DNS cache on connection.",
+                  value: s.autoFlush,
+                  onChanged: s.toggleAutoFlush,
+                ),
+                _listTile(
+                  "Manual Cache Flush",
+                  Icons.cleaning_services_rounded,
+                  dns.flushDns,
+                  colorScheme,
+                ),
+              ]),
+              const SizedBox(height: 24),
+              const _Label(text: "APPEARANCE"),
+              _Card([
+                SettingsSwitch(
+                  title: "Dark Theme",
+                  subtitle: "Switch to deep black mode.",
+                  value: s.isDarkMode,
+                  onChanged: (_) => s.toggleTheme(),
+                ),
+                if (s.isDesktop)
+                  SettingsSwitch(
+                    title: "Wide Dashboard Mode",
+                    subtitle: "Switch to landscape mode.",
+                    value: s.isWideMode,
+                    onChanged: s.toggleWideMode,
+                  ),
+                _buildAccentPicker(s, colorScheme),
+              ]),
+              const SizedBox(height: 24),
+              const _Label(text: "DATA MANAGEMENT"),
+              _actionBtn(
+                s.resetButtonText,
+                Icons.history_rounded,
+                () => s.resetProviders(dns.resetToDefaultProfiles),
+                s.isResetConfirming ? Colors.redAccent : accent,
                 colorScheme,
               ),
-            SettingsSwitch(
-              title: "Show Notifications",
-              subtitle: "Alert on status changes.",
-              value: s.showNotifications,
-              onChanged: s.toggleNotifications,
-            ),
-          ]),
-          const SizedBox(height: 24),
-          const _Label(text: "NETWORK"),
-          _Card([
-            if (s.isDesktop)
-              SettingsSwitch(
-                title: "Disable IPv6 on Interface",
-                subtitle: "Prevent IPv6 leaks.",
-                value: s.disableIpv6,
-                onChanged: s.toggleDisableIpv6,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _actionBtn(
+                      "EXPORT",
+                      Icons.upload_rounded,
+                      () async {
+                        final jsonString = jsonEncode(
+                            dns.profiles.map((p) => p.toJson()).toList());
+                        final success = await s.exportProfiles(jsonString);
+                        if (mounted && success) {
+                          context
+                              .read<ToastProvider>()
+                              .showToast("PROFILES EXPORTED");
+                        }
+                      },
+                      accent,
+                      colorScheme,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _actionBtn(
+                      "IMPORT",
+                      Icons.download_rounded,
+                      () => s.importProfiles((data) {
+                        if (mounted) {
+                          context
+                              .read<DnsProvider>()
+                              .importProfilesFromData(data);
+                        }
+                      }),
+                      accent,
+                      colorScheme,
+                    ),
+                  ),
+                ],
               ),
-            SettingsSwitch(
-              title: "Auto Flush Cache",
-              subtitle: "Clear DNS cache on connection.",
-              value: s.autoFlush,
-              onChanged: s.toggleAutoFlush,
-            ),
-            _listTile(
-              "Manual Cache Flush",
-              Icons.cleaning_services_rounded,
-              dns.flushDns,
-              colorScheme,
-            ),
-          ]),
-          const SizedBox(height: 24),
-          const _Label(text: "APPEARANCE"),
-          _Card([
-            SettingsSwitch(
-              title: "Dark Theme",
-              subtitle: "Switch to deep black mode.",
-              value: s.isDarkMode,
-              onChanged: (_) => s.toggleTheme(),
-            ),
-            _buildAccentPicker(s, colorScheme),
-          ]),
-          const SizedBox(height: 24),
-          const _Label(text: "DATA MANAGEMENT"),
-          _actionBtn(
-            s.resetButtonText,
-            Icons.history_rounded,
-            () => s.resetProviders(dns.resetToDefaultProfiles),
-            s.isResetConfirming ? Colors.redAccent : accent,
-            colorScheme,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _actionBtn(
-                  "EXPORT",
-                  Icons.upload_rounded,
-                  () async {
-                    final jsonString = jsonEncode(
-                        dns.profiles.map((p) => p.toJson()).toList());
-                    final success = await s.exportProfiles(jsonString);
-                    if (mounted && success) {
+              const SizedBox(height: 24),
+              const _Label(text: "TROUBLESHOOTING"),
+              _Card([
+                if (s.isDesktop)
+                  _listTile("Restart System Service", Icons.refresh_rounded,
+                      dns.restartService, colorScheme),
+                _listTile("External DNS Leak Test", Icons.security_rounded,
+                    s.openLeakTest, colorScheme),
+              ]),
+              const SizedBox(height: 48),
+              Center(
+                child: InkWell(
+                  onTap: () async {
+                    final update = await UpdateService.checkUpdate();
+                    if (update != null && context.mounted) {
+                      showDialog(
+                          context: context,
+                          builder: (_) => UpdateDialog(info: update));
+                    } else if (context.mounted) {
                       context
                           .read<ToastProvider>()
-                          .showToast("PROFILES EXPORTED");
+                          .showToast("YOU ARE UP TO DATE");
                     }
                   },
-                  accent,
-                  colorScheme,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.update_rounded,
+                            size: 14, color: accent.withValues(alpha: 0.6)),
+                        const SizedBox(width: 6),
+                        Text(
+                          "CHECK FOR UPDATES",
+                          style: TextStyle(
+                            color: accent.withValues(alpha: 0.6),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _actionBtn(
-                  "IMPORT",
-                  Icons.download_rounded,
-                  () => s.importProfiles((data) {
-                    if (mounted) {
-                      context.read<DnsProvider>().importProfilesFromData(data);
-                    }
-                  }),
-                  accent,
-                  colorScheme,
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  s.versionText,
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withValues(alpha: 0.15),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
+              const SizedBox(height: 30),
             ],
           ),
-          const SizedBox(height: 24),
-          const _Label(text: "TROUBLESHOOTING"),
-          _Card([
-            if (s.isDesktop)
-              _listTile("Restart System Service", Icons.refresh_rounded,
-                  dns.restartService, colorScheme),
-            _listTile("External DNS Leak Test", Icons.security_rounded,
-                s.openLeakTest, colorScheme),
-          ]),
-          const SizedBox(height: 48),
-          Center(
-            child: InkWell(
-              onTap: () async {
-                final update = await UpdateService.checkUpdate();
-                if (update != null && context.mounted) {
-                  showDialog(
-                      context: context,
-                      builder: (_) => UpdateDialog(info: update));
-                } else if (context.mounted) {
-                  context.read<ToastProvider>().showToast("YOU ARE UP TO DATE");
-                }
-              },
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.update_rounded,
-                        size: 14, color: accent.withValues(alpha: 0.6)),
-                    const SizedBox(width: 6),
-                    Text(
-                      "CHECK FOR UPDATES",
-                      style: TextStyle(
-                        color: accent.withValues(alpha: 0.6),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text(
-              s.versionText,
-              style: TextStyle(
-                color: colorScheme.onSurface.withValues(alpha: 0.15),
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(height: 30),
-        ],
+        ),
       ),
     );
   }

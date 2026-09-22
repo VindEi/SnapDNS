@@ -68,6 +68,7 @@ class SettingsProvider extends ChangeNotifier {
   bool get launchHidden => _settings.launchHidden;
   bool get verifyConnection => _settings.verifyConnection;
   bool get disableIpv6 => _settings.disableIpv6;
+  bool get isWideMode => _settings.isWideMode;
   bool get isDarkMode => _settings.theme == "Dark";
 
   bool get isAdaptive => _settings.accentColor == "adaptive";
@@ -163,6 +164,25 @@ class SettingsProvider extends ChangeNotifier {
     _settings.disableIpv6 = v;
     _save();
     notifyListeners();
+  }
+
+  void toggleWideMode(bool v) async {
+    _settings.isWideMode = v;
+    _save();
+    notifyListeners();
+    if (isDesktop) {
+      await _applyWindowDimensions(v);
+    }
+  }
+
+  Future<void> _applyWindowDimensions(bool isWide) async {
+    if (!isDesktop) return;
+    try {
+      final targetSize = isWide ? const Size(800, 480) : const Size(400, 600);
+      await windowManager.setMinimumSize(targetSize);
+      await windowManager.setMaximumSize(targetSize);
+      await windowManager.setSize(targetSize);
+    } catch (_) {}
   }
 
   void toggleTheme() async {

@@ -32,122 +32,148 @@ class MainPage extends StatelessWidget {
         context.select<DnsProvider, List<DnsConfiguration>>((d) => d.profiles);
     final cs = Theme.of(context).colorScheme;
 
-    final mainContent = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment:
-          isDesktop ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-      children: [
-        DnsCard(
-          child: Column(
+    final bool isWide = MediaQuery.of(context).size.width >= 600 ||
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
+    final Widget statusCard = DnsCard(
+      child: Column(
+        crossAxisAlignment:
+            isDesktop ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        mainAxisAlignment:
+            isWide ? MainAxisAlignment.center : MainAxisAlignment.start,
+        children: [
+          if (isDesktop) ...[
+            const NetworkStatusBar(),
+            SizedBox(height: isWide ? 28 : 20),
+          ],
+          Row(
+            mainAxisAlignment:
+                isDesktop ? MainAxisAlignment.start : MainAxisAlignment.center,
+            children: [
+              _label(isDesktop ? "CURRENT RESOLVER" : "VPN TUNNEL", cs),
+              if (isDesktop) const Spacer(),
+              if (isDesktop && !isSystemDnsSaved) _saveActiveBtn(context, cs),
+            ],
+          ),
+          SizedBox(height: isWide ? 16 : 12),
+          _buildReadout(context, smartDnsValues, cs, isDesktop),
+          const SizedBox(height: 8),
+          Text(
+            smartProviderName,
+            style: TextStyle(
+              color: cs.primary,
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+              letterSpacing: 0.8,
+            ),
+          ),
+          if (!isDesktop && !isSystemDnsSaved) ...[
+            const SizedBox(height: 16),
+            _saveActiveBtn(context, cs),
+          ],
+        ],
+      ),
+    );
+
+    final Widget connectCard = DnsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Text(
+                "Choose & Connect",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
+              const Spacer(),
+              const ProtocolToggle(),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const DnsInputStack(),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children:
+                profiles.take(3).map((p) => _buildChip(context, p)).toList(),
+          ),
+          const SizedBox(height: 24),
+          if (isDesktop)
+            Row(
+              children: [
+                Expanded(
+                  child: ActionButton(
+                    label: "Connect",
+                    onTap: () => _handleConnect(context),
+                    backgroundColor: cs.primary,
+                    textColor: cs.primary.contrastColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ActionButton(
+                    label: "Restore",
+                    onTap: context.read<DnsProvider>().resetToDefaults,
+                    backgroundColor: cs.onSurface.withValues(alpha: 0.05),
+                    textColor: cs.onSurface.withValues(alpha: 0.7),
+                    outlined: true,
+                  ),
+                ),
+              ],
+            )
+          else
+            ActionButton(
+              label: isMobileConnected ? "Disconnect" : "Connect",
+              onTap: isMobileConnected
+                  ? context.read<DnsProvider>().resetToDefaults
+                  : () => _handleConnect(context),
+              backgroundColor:
+                  isMobileConnected ? Colors.redAccent : cs.primary,
+              textColor:
+                  isMobileConnected ? Colors.white : cs.primary.contrastColor,
+            ),
+        ],
+      ),
+    );
+
+    final Widget mainContent = isWide
+        ? IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: statusCard),
+                const SizedBox(width: 16),
+                Expanded(child: connectCard),
+              ],
+            ),
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: isDesktop
                 ? CrossAxisAlignment.start
                 : CrossAxisAlignment.center,
             children: [
-              if (isDesktop) const NetworkStatusBar(),
-              if (isDesktop) const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: isDesktop
-                    ? MainAxisAlignment.start
-                    : MainAxisAlignment.center,
-                children: [
-                  _label(isDesktop ? "CURRENT RESOLVER" : "VPN TUNNEL", cs),
-                  if (isDesktop) const Spacer(),
-                  if (isDesktop && !isSystemDnsSaved)
-                    _saveActiveBtn(context, cs),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildReadout(context, smartDnsValues, cs, isDesktop),
+              statusCard,
               const SizedBox(height: 16),
-              Text(
-                smartProviderName,
-                style: TextStyle(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 10,
-                    letterSpacing: 0.8),
-              ),
-              if (!isDesktop && !isSystemDnsSaved) ...[
-                const SizedBox(height: 16),
-                _saveActiveBtn(context, cs),
-              ]
+              connectCard,
             ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        DnsCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text("Choose & Connect",
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: cs.onSurface)),
-                  const Spacer(),
-                  const ProtocolToggle(),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const DnsInputStack(),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: profiles
-                    .take(3)
-                    .map((p) => _buildChip(context, p))
-                    .toList(),
-              ),
-              const SizedBox(height: 24),
-              if (isDesktop)
-                Row(
-                  children: [
-                    Expanded(
-                        child: ActionButton(
-                      label: "Connect",
-                      onTap: () => _handleConnect(context),
-                      backgroundColor: cs.primary,
-                      textColor: cs.primary.contrastColor,
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: ActionButton(
-                            label: "Restore",
-                            onTap: context.read<DnsProvider>().resetToDefaults,
-                            backgroundColor:
-                                cs.onSurface.withValues(alpha: 0.05),
-                            textColor: cs.onSurface.withValues(alpha: 0.7),
-                            outlined: true)),
-                  ],
-                )
-              else
-                ActionButton(
-                  label: isMobileConnected ? "Disconnect" : "Connect",
-                  onTap: isMobileConnected
-                      ? context.read<DnsProvider>().resetToDefaults
-                      : () => _handleConnect(context),
-                  backgroundColor:
-                      isMobileConnected ? Colors.redAccent : cs.primary,
-                  textColor: isMobileConnected
-                      ? Colors.white
-                      : cs.primary.contrastColor,
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
+          );
 
-    return isDesktop
-        ? ListView(padding: const EdgeInsets.all(16.0), children: [mainContent])
-        : Center(
-            child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: mainContent));
+    return Center(
+      child: SingleChildScrollView(
+        physics: isDesktop
+            ? const ClampingScrollPhysics()
+            : const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        child: mainContent,
+      ),
+    );
   }
 
   Widget _buildChip(BuildContext context, DnsConfiguration p) {

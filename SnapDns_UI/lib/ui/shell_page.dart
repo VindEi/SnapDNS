@@ -35,7 +35,6 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
       windowManager.addListener(this);
     }
 
-    // Check for updates 3 seconds after launch
     Future.delayed(
         const Duration(seconds: 3), () => _checkForUpdates(silent: true));
 
@@ -91,6 +90,9 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
 
+    final bool isWide = MediaQuery.of(context).size.width >= 600 ||
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
@@ -99,42 +101,76 @@ class _ShellPageState extends State<ShellPage> with WindowListener {
           children: [
             const CustomTitleBar(),
             Expanded(
-              child: Stack(
+              child: Row(
                 children: [
-                  IndexedStack(index: selectedIndex, children: _pages),
-                  const ToastOverlay(),
+                  if (isWide)
+                    Container(
+                      width: 50,
+                      decoration: BoxDecoration(
+                        color: theme.scaffoldBackgroundColor,
+                        border: Border(
+                          right: BorderSide(
+                            color: theme.colorScheme.outline
+                                .withValues(alpha: 0.1),
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _navBtn(Icons.settings_outlined, 0, selectedIndex,
+                              accent, theme.colorScheme),
+                          const SizedBox(height: 30),
+                          _navBtn(Icons.bolt_rounded, 1, selectedIndex, accent,
+                              theme.colorScheme),
+                          const SizedBox(height: 30),
+                          _navBtn(Icons.dns_outlined, 2, selectedIndex, accent,
+                              theme.colorScheme),
+                        ],
+                      ),
+                    ),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        IndexedStack(index: selectedIndex, children: _pages),
+                        const ToastOverlay(),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            Container(
-              padding: EdgeInsets.only(
-                  bottom:
-                      isDesktop ? 0 : MediaQuery.of(context).padding.bottom),
-              decoration: BoxDecoration(
-                color: theme.scaffoldBackgroundColor,
-                border: Border(
-                  top: BorderSide(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                      width: 0.5),
+            if (!isWide)
+              Container(
+                padding: EdgeInsets.only(
+                    bottom:
+                        isDesktop ? 0 : MediaQuery.of(context).padding.bottom),
+                decoration: BoxDecoration(
+                  color: theme.scaffoldBackgroundColor,
+                  border: Border(
+                    top: BorderSide(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                        width: 0.5),
+                  ),
+                ),
+                child: SizedBox(
+                  height: 50,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _navBtn(Icons.settings_outlined, 0, selectedIndex, accent,
+                          theme.colorScheme),
+                      const SizedBox(width: 50),
+                      _navBtn(Icons.bolt_rounded, 1, selectedIndex, accent,
+                          theme.colorScheme),
+                      const SizedBox(width: 50),
+                      _navBtn(Icons.dns_outlined, 2, selectedIndex, accent,
+                          theme.colorScheme),
+                    ],
+                  ),
                 ),
               ),
-              child: SizedBox(
-                height: 50,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _navBtn(Icons.settings_outlined, 0, selectedIndex, accent,
-                        theme.colorScheme),
-                    const SizedBox(width: 50),
-                    _navBtn(Icons.bolt_rounded, 1, selectedIndex, accent,
-                        theme.colorScheme),
-                    const SizedBox(width: 50),
-                    _navBtn(Icons.dns_outlined, 2, selectedIndex, accent,
-                        theme.colorScheme),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),

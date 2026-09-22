@@ -19,54 +19,59 @@ class _ProfilesPageState extends State<ProfilesPage> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          ReorderableListView.builder(
-            buildDefaultDragHandles: false,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            itemCount: dns.profiles.length,
-            // FIX: Restored the modern onReorderItem parameter for Flutter 3.41+
-            onReorderItem: (int oldIndex, int newIndex) {
-              dns.reorderProfiles(oldIndex, newIndex);
-            },
-            itemBuilder: (context, index) {
-              final p = dns.profiles[index];
-              return ProfileCard(
-                key: ValueKey(p.id),
-                config: p,
-                index: index,
-                isExpanded: _expandedIndex == index,
-                isActive: dns.systemPrimary == p.primaryDns ||
-                    dns.systemPrimary == p.dohUrl,
-                onToggle: () => setState(
-                  () => _expandedIndex = _expandedIndex == index ? null : index,
-                ),
-                onEdit: () => _showEditor(context, p),
-                onDelete: () {
-                  setState(() => _expandedIndex = null);
-                  dns.deleteProfile(p);
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Stack(
+            children: [
+              ReorderableListView.builder(
+                buildDefaultDragHandles: false,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                itemCount: dns.profiles.length,
+                onReorderItem: (int oldIndex, int newIndex) {
+                  dns.reorderProfiles(oldIndex, newIndex);
                 },
-              );
-            },
+                itemBuilder: (context, index) {
+                  final p = dns.profiles[index];
+                  return ProfileCard(
+                    key: ValueKey(p.id),
+                    config: p,
+                    index: index,
+                    isExpanded: _expandedIndex == index,
+                    isActive: dns.systemPrimary == p.primaryDns ||
+                        dns.systemPrimary == p.dohUrl,
+                    onToggle: () => setState(
+                      () => _expandedIndex =
+                          _expandedIndex == index ? null : index,
+                    ),
+                    onEdit: () => _showEditor(context, p),
+                    onDelete: () {
+                      setState(() => _expandedIndex = null);
+                      dns.deleteProfile(p);
+                    },
+                  );
+                },
+              ),
+              Positioned(
+                bottom: 20,
+                left: 20,
+                child: _TechFab(
+                  icon: Icons.refresh_rounded,
+                  onTap: dns.refreshLatencies,
+                ),
+              ),
+              Positioned(
+                bottom: 20,
+                right: 20,
+                child: _TechFab(
+                  icon: Icons.add,
+                  onTap: () => _showEditor(context, null),
+                  isAccent: true,
+                ),
+              ),
+            ],
           ),
-          Positioned(
-            bottom: 20,
-            left: 20,
-            child: _TechFab(
-              icon: Icons.refresh_rounded,
-              onTap: dns.refreshLatencies,
-            ),
-          ),
-          Positioned(
-            bottom: 20,
-            right: 20,
-            child: _TechFab(
-              icon: Icons.add,
-              onTap: () => _showEditor(context, null),
-              isAccent: true,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
