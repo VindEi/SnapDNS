@@ -26,7 +26,7 @@ class ProfileCard extends StatelessWidget {
 
   String _getSubtitle(DnsConfiguration c) {
     String mainInfo = "";
-    List<String> tags = [];
+    final List<String> tags = [];
 
     if (c.primaryDns.isNotEmpty) {
       mainInfo = c.primaryDns;
@@ -38,7 +38,12 @@ class ProfileCard extends StatelessWidget {
       if (c.dohUrl.isNotEmpty) tags.add("DoH");
       if (c.dotHostname.isNotEmpty) tags.add("DoT");
     } else if (c.dohUrl.isNotEmpty) {
-      mainInfo = c.dohUrl.replaceFirst(RegExp(r'^https?://'), '');
+      try {
+        final uri = Uri.parse(c.dohUrl);
+        mainInfo = uri.host.isNotEmpty ? uri.host : c.dohUrl;
+      } catch (_) {
+        mainInfo = c.dohUrl.replaceFirst(RegExp(r'^https?://'), '');
+      }
       if (c.dotHostname.isNotEmpty) tags.add("DoT");
     } else if (c.dotHostname.isNotEmpty) {
       mainInfo = c.dotHostname;
@@ -60,8 +65,12 @@ class ProfileCard extends StatelessWidget {
         .firstWhere((p) => p.id == config.id, orElse: () => config)
         .latencyMs);
 
-    Color statusColor =
+    final Color statusColor =
         isActive ? Colors.greenAccent : (isMatched ? cs.primary : cs.outline);
+
+    final String displayName = config.group.trim().isNotEmpty
+        ? config.group.toUpperCase()
+        : config.name.toUpperCase();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -96,32 +105,42 @@ class ProfileCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(config.name.toUpperCase(),
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 10,
-                                  color: (isMatched || isActive)
-                                      ? statusColor
-                                      : cs.onSurface.withValues(alpha: 0.8))),
-                          Text(_getSubtitle(config),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 10,
-                                  fontFamily: 'Consolas')),
+                          Text(
+                            displayName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 10,
+                              color: (isMatched || isActive)
+                                  ? statusColor
+                                  : cs.onSurface.withValues(alpha: 0.8),
+                            ),
+                          ),
+                          Text(
+                            _getSubtitle(config),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 10,
+                              fontFamily: 'Consolas',
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     _LatencyIndicator(ms: currentLatencyMs),
                     const SizedBox(width: 12),
                     ReorderableDragStartListener(
-                        index: index,
-                        child: MouseRegion(
-                            cursor: SystemMouseCursors.grab,
-                            child: Icon(Icons.drag_indicator_rounded,
-                                size: 18,
-                                color: cs.onSurface.withValues(alpha: 0.1)))),
+                      index: index,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.grab,
+                        child: Icon(
+                          Icons.drag_indicator_rounded,
+                          size: 18,
+                          color: cs.onSurface.withValues(alpha: 0.1),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -136,9 +155,11 @@ class ProfileCard extends StatelessWidget {
   Widget _buildActions(BuildContext context, ColorScheme cs) => Container(
         height: 36,
         decoration: BoxDecoration(
-            color: cs.onSurface.withValues(alpha: 0.02),
-            border: Border(
-                top: BorderSide(color: cs.outline.withValues(alpha: 0.1)))),
+          color: cs.onSurface.withValues(alpha: 0.02),
+          border: Border(
+            top: BorderSide(color: cs.outline.withValues(alpha: 0.1)),
+          ),
+        ),
         child: Row(
           children: [
             _btn("LOAD", cs.primary, () {
@@ -146,11 +167,12 @@ class ProfileCard extends StatelessWidget {
               context.read<SettingsProvider>().setPage(1);
             }),
             _btn(
-                "SHARE",
-                cs.onSurface.withValues(alpha: 0.4),
-                () => context
-                    .read<DnsProvider>()
-                    .copyToClipboard(DnsIntelligence.formatForSharing(config))),
+              "SHARE",
+              cs.onSurface.withValues(alpha: 0.4),
+              () => context
+                  .read<DnsProvider>()
+                  .copyToClipboard(DnsIntelligence.formatForSharing(config)),
+            ),
             _btn("EDIT", cs.onSurface.withValues(alpha: 0.4), onEdit),
             _DeleteButton(onDelete: onDelete),
           ],
@@ -158,39 +180,51 @@ class ProfileCard extends StatelessWidget {
       );
 
   Widget _btn(String l, Color c, VoidCallback t) => Expanded(
-      child: MouseRegion(
+        child: MouseRegion(
           cursor: SystemMouseCursors.click,
           child: InkWell(
-              onTap: t,
-              child: Center(
-                  child: Text(l,
-                      style: TextStyle(
-                          color: c,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 9,
-                          letterSpacing: 1.2))))));
+            onTap: t,
+            child: Center(
+              child: Text(
+                l,
+                style: TextStyle(
+                  color: c,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 9,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 class _LatencyIndicator extends StatelessWidget {
   final int ms;
   const _LatencyIndicator({required this.ms});
+
   @override
   Widget build(BuildContext context) {
     Color color = Colors.greenAccent;
     if (ms > 150) color = Colors.orangeAccent;
     if (ms > 300 || ms < 0) color = Colors.redAccent;
-    return Text(ms < 0 ? "--" : "${ms}MS",
-        style: TextStyle(
-            color: color.withValues(alpha: 0.7),
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'Consolas'));
+    return Text(
+      ms < 0 ? "--" : "${ms}MS",
+      style: TextStyle(
+        color: color.withValues(alpha: 0.7),
+        fontSize: 9,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'Consolas',
+      ),
+    );
   }
 }
 
 class _DeleteButton extends StatefulWidget {
   final VoidCallback onDelete;
   const _DeleteButton({required this.onDelete});
+
   @override
   State<_DeleteButton> createState() => _DeleteButtonState();
 }
@@ -199,7 +233,6 @@ class _DeleteButtonState extends State<_DeleteButton> {
   bool _confirm = false;
   Timer? _timer;
 
-  // FIX: Safely cancel active timers to prevent memory leaks during profile deletions
   @override
   void dispose() {
     _timer?.cancel();
@@ -208,6 +241,7 @@ class _DeleteButtonState extends State<_DeleteButton> {
 
   void _handle() {
     if (_confirm) {
+      _timer?.cancel();
       widget.onDelete();
     } else {
       setState(() => _confirm = true);
@@ -220,14 +254,21 @@ class _DeleteButtonState extends State<_DeleteButton> {
 
   @override
   Widget build(BuildContext context) => Expanded(
-      child: MouseRegion(
+        child: MouseRegion(
           cursor: SystemMouseCursors.click,
           child: InkWell(
-              onTap: _handle,
-              child: Center(
-                  child: Text(_confirm ? "CONFIRM?" : "DELETE",
-                      style: TextStyle(
-                          color: _confirm ? Colors.redAccent : Colors.grey,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 9))))));
+            onTap: _handle,
+            child: Center(
+              child: Text(
+                _confirm ? "CONFIRM?" : "DELETE",
+                style: TextStyle(
+                  color: _confirm ? Colors.redAccent : Colors.grey,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 9,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }

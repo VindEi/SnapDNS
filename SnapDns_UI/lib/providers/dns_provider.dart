@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -21,6 +22,7 @@ class DnsProvider extends ChangeNotifier {
   Timer? _refreshTimer;
   bool _isRefreshing = false;
   bool _isFlushing = false;
+  bool _isDisposed = false;
 
   bool get isDesktop => DnsEngine.isDesktop;
 
@@ -35,9 +37,11 @@ class DnsProvider extends ChangeNotifier {
   DnsConfiguration? _activeMobileConfig;
 
   final List<DnsConfiguration> _profiles = [];
-  List<DnsConfiguration> get profiles => _profiles;
+  UnmodifiableListView<DnsConfiguration> get profiles =>
+      UnmodifiableListView(_profiles);
+
   final List<String> _adapters = [];
-  List<String> get adapters => _adapters;
+  UnmodifiableListView<String> get adapters => UnmodifiableListView(_adapters);
 
   String smartProviderName = "DISCONNECTED";
   List<String> smartDnsValues = ["---"];
@@ -56,6 +60,7 @@ class DnsProvider extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
+    _profiles.clear();
     _profiles.addAll(await ProfileStorage.load());
     if (_profiles.isEmpty) await resetToDefaultProfiles();
 
@@ -64,15 +69,19 @@ class DnsProvider extends ChangeNotifier {
         final activeFile =
             File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
         if (await activeFile.exists()) {
-          final savedId = await activeFile.readAsString();
-          _activeMobileConfig =
-              _profiles.firstWhere((p) => p.id == savedId.trim());
+          final savedId = (await activeFile.readAsString()).trim();
+          _activeMobileConfig = _profiles.cast<DnsConfiguration?>().firstWhere(
+                (p) => p != null && p.id == savedId,
+                orElse: () => null,
+              );
         }
       } catch (_) {}
     }
 
     await _engine.initialize();
     await refreshStatus();
+
+    _refreshTimer?.cancel();
     _refreshTimer =
         Timer.periodic(const Duration(seconds: 5), (_) => refreshStatus());
   }
@@ -84,6 +93,7 @@ class DnsProvider extends ChangeNotifier {
     if (systemPrimary == "---" || systemPrimary == "AUTO") return true;
     return _profiles.any((p) =>
         p.primaryDns == systemPrimary ||
+        p.ipv6Primary == systemPrimary ||
         p.dohUrl == systemPrimary ||
         p.dotHostname == systemPrimary);
   }
@@ -91,11 +101,13 @@ class DnsProvider extends ChangeNotifier {
   bool isAdapterSelected(String? id) => _manualAdapterId == id;
 
   Future<void> refreshStatus() async {
-    if (_isRefreshing) return;
+    if (_isRefreshing || _isDisposed) return;
     _isRefreshing = true;
 
     try {
       final state = await _engine.getStatus(_manualAdapterId ?? "");
+      if (_isDisposed) return;
+
       isServiceConnected = state.isServiceConnected;
 
       if (isDesktop) {
@@ -111,6 +123,7 @@ class DnsProvider extends ChangeNotifier {
           systemPrimary = "---";
           smartDnsValues = ["---"];
           smartProviderName = "SERVICE OFFLINE";
+          systemIpv6Status = "OFF";
 
           if (isDesktop) {
             AppTrayManager().updateTooltip("Service offline");
@@ -130,17 +143,23 @@ class DnsProvider extends ChangeNotifier {
           systemPrimary = "AUTO";
           smartDnsValues = ["AUTO"];
           smartProviderName = "SYSTEM DEFAULT (DHCP)";
+          systemIpv6Status = "OFF";
         }
       }
     } catch (_) {
     } finally {
       _isRefreshing = false;
-      notifyListeners();
+      if (!_isDisposed && hasListeners) {
+        notifyListeners();
+      }
     }
   }
 
   void _updateUI(DnsConfiguration cfg) {
-    systemIsDoh = cfg.primaryDns == "127.0.0.1";
+    systemIsDoh = cfg.primaryDns == "127.0.0.1" ||
+        cfg.dohUrl.isNotEmpty ||
+        cfg.dotHostname.isNotEmpty;
+
     systemPrimary = systemIsDoh
         ? (cfg.dohUrl.isNotEmpty ? cfg.dohUrl : cfg.dotHostname)
         : (cfg.primaryDns.isEmpty || cfg.primaryDns == "DHCP"
@@ -167,16 +186,35 @@ class DnsProvider extends ChangeNotifier {
           cfg.name == "DHCP" ? "SYSTEM DEFAULT (DHCP)" : "CUSTOM RESOLVER";
       String protocol = "IP";
 
-      if (systemIsDoh) {
-        protocol = cfg.dohUrl.isNotEmpty ? "DoH" : "DoT";
+      if (cfg.dohUrl.isNotEmpty) {
+        protocol = "DoH";
+      } else if (cfg.dotHostname.isNotEmpty) {
+        protocol = "DoT";
       }
 
       for (var p in _profiles) {
-        if ((systemIsDoh &&
+        final bool isMatch = (systemIsDoh &&
                 (p.dohUrl == systemPrimary ||
                     p.dotHostname == systemPrimary)) ||
-            (!systemIsDoh && p.primaryDns == systemPrimary)) {
-          smartProviderName = p.name.toUpperCase();
+            (!systemIsDoh &&
+                (p.primaryDns == systemPrimary ||
+                    p.ipv6Primary == systemPrimary));
+
+        if (isMatch) {
+          if (p.group.trim().isNotEmpty) {
+            final groupUpper = p.group.trim().toUpperCase();
+            final shortVariant = p.name.split('(').first.trim().toUpperCase();
+            final bool isStandard = shortVariant == "STANDARD" ||
+                shortVariant == "DEFAULT" ||
+                shortVariant == groupUpper ||
+                shortVariant.isEmpty;
+
+            smartProviderName =
+                isStandard ? groupUpper : "$groupUpper ($shortVariant)";
+          } else {
+            smartProviderName = p.name.toUpperCase();
+          }
+
           if (p.dohUrl.isNotEmpty && systemIsDoh) {
             protocol = "DoH";
           } else if (p.dotHostname.isNotEmpty && systemIsDoh) {
@@ -190,7 +228,7 @@ class DnsProvider extends ChangeNotifier {
         }
       }
 
-      if (isDesktop) {
+      if (isDesktop && smartProviderName.isNotEmpty) {
         final String displayName = smartProviderName == "CUSTOM RESOLVER"
             ? "Custom"
             : smartProviderName[0] +
@@ -263,6 +301,7 @@ class DnsProvider extends ChangeNotifier {
         systemPrimary = "AUTO";
         smartDnsValues = ["AUTO"];
         smartProviderName = "SYSTEM DEFAULT (DHCP)";
+        systemIpv6Status = "OFF";
 
         try {
           final activeFile =
@@ -302,6 +341,7 @@ class DnsProvider extends ChangeNotifier {
       } else if (_activeMobileConfig != null) {
         _toastProvider.showToast("FLUSHING...");
         await _engine.disconnect("");
+        await Future.delayed(const Duration(milliseconds: 150));
         await _engine.connect(_activeMobileConfig!, "");
         _toastProvider.showToast("VPN RESTARTED (CACHE FLUSHED)");
       } else {
@@ -326,6 +366,11 @@ class DnsProvider extends ChangeNotifier {
   }
 
   int importProfilesFromData(String data) {
+    if (data.length > 5 * 1024 * 1024) {
+      _toastProvider.showToast("FILE TOO LARGE");
+      return 0;
+    }
+
     final imported = DnsIntelligence.parseImportData(data);
     if (imported.isEmpty) {
       _toastProvider.showToast("NO VALID DATA FOUND");
@@ -343,7 +388,9 @@ class DnsProvider extends ChangeNotifier {
       } else {
         final exists = _profiles.any((p) =>
             p.name == profile.name &&
+            p.group == profile.group &&
             p.primaryDns == profile.primaryDns &&
+            p.ipv6Primary == profile.ipv6Primary &&
             p.dohUrl == profile.dohUrl &&
             p.dotHostname == profile.dotHostname);
 
@@ -368,6 +415,13 @@ class DnsProvider extends ChangeNotifier {
     return total;
   }
 
+  void setProfiles(List<DnsConfiguration> updated) {
+    _profiles.clear();
+    _profiles.addAll(updated);
+    ProfileStorage.save(_profiles);
+    notifyListeners();
+  }
+
   void smartImport(DnsConfiguration? suggested) {
     if (suggested == null) {
       _toastProvider.showToast("NO DATA FOUND");
@@ -377,23 +431,53 @@ class DnsProvider extends ChangeNotifier {
     _toastProvider.showToast("IMPORTED");
   }
 
-  DnsConfiguration getSystemAsConfig() => DnsConfiguration(
-        name: "Live Backup",
-        primaryDns: systemIsDoh ? "" : systemPrimary,
-        dohUrl: systemIsDoh ? systemPrimary : "",
-      );
+  DnsConfiguration getSystemAsConfig() {
+    String resolvedDoh = "";
+    String resolvedDot = "";
+
+    if (systemIsDoh) {
+      if (systemPrimary.startsWith("http://") ||
+          systemPrimary.startsWith("https://")) {
+        resolvedDoh = systemPrimary;
+      } else {
+        resolvedDot = systemPrimary;
+      }
+    }
+
+    return DnsConfiguration(
+      name: "Live Backup",
+      primaryDns: systemIsDoh ? "" : systemPrimary,
+      dohUrl: resolvedDoh,
+      dotHostname: resolvedDot,
+    );
+  }
 
   Future<void> refreshLatencies() async {
-    final futures = _profiles.map((p) async {
-      p.latencyMs = await SystemUtils.checkLatency(p);
-    }).toList();
-    await Future.wait(futures);
+    const int batchSize = 5;
+    for (int i = 0; i < _profiles.length; i += batchSize) {
+      final batch = _profiles.skip(i).take(batchSize);
+      await Future.wait(batch.map((p) async {
+        p.latencyMs = await SystemUtils.checkLatency(p);
+      }));
+    }
     notifyListeners();
   }
 
   Future<void> resetToDefaultProfiles() async {
     _profiles.clear();
-    _profiles.addAll(DnsIntelligence.defaultProfiles);
+    for (var def in DnsIntelligence.defaultProfiles) {
+      _profiles.add(DnsConfiguration(
+        id: def.id,
+        name: def.name,
+        group: def.group,
+        primaryDns: def.primaryDns,
+        secondaryDns: def.secondaryDns,
+        ipv6Primary: def.ipv6Primary,
+        ipv6Secondary: def.ipv6Secondary,
+        dohUrl: def.dohUrl,
+        dotHostname: def.dotHostname,
+      ));
+    }
     ProfileStorage.save(_profiles);
     notifyListeners();
   }
@@ -425,14 +509,9 @@ class DnsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void reorderProfiles(int o, int n) {
-    _profiles.insert(n, _profiles.removeAt(o));
-    ProfileStorage.save(_profiles);
-    notifyListeners();
-  }
-
   @override
   void dispose() {
+    _isDisposed = true;
     _refreshTimer?.cancel();
     super.dispose();
   }

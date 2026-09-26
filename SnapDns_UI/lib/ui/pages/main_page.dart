@@ -16,6 +16,36 @@ import '../widgets/profiles/profile_editor.dart';
 class MainPage extends StatelessWidget {
   const MainPage({super.key});
 
+  List<({String label, DnsConfiguration profile})> _getQuickConnectProfiles(
+      List<DnsConfiguration> profiles) {
+    final Map<String, DnsConfiguration> providerMap = {};
+
+    for (var p in profiles) {
+      final String groupKey =
+          p.group.trim().isNotEmpty ? p.group.trim() : p.name;
+      final String cleanLabel = groupKey.trim().toUpperCase();
+
+      if (!providerMap.containsKey(cleanLabel)) {
+        providerMap[cleanLabel] = p;
+      } else {
+        final existing = providerMap[cleanLabel]!;
+        final pIsStandard = p.name.toLowerCase().contains("standard") ||
+            p.name.toLowerCase().contains("default");
+        final existingIsStandard =
+            existing.name.toLowerCase().contains("standard") ||
+                existing.name.toLowerCase().contains("default");
+        if (pIsStandard && !existingIsStandard) {
+          providerMap[cleanLabel] = p;
+        }
+      }
+    }
+
+    return providerMap.entries
+        .take(4)
+        .map((e) => (label: e.key, profile: e.value))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop =
@@ -100,8 +130,16 @@ class MainPage extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children:
-                profiles.take(3).map((p) => _buildChip(context, p)).toList(),
+            children: _getQuickConnectProfiles(profiles).map((item) {
+              final isSelected = context.select<DnsInputProvider, bool>(
+                  (i) => i.isInputMatch(item.profile));
+              return ProfileChip(
+                label: item.label,
+                isSelected: isSelected,
+                onTap: () =>
+                    context.read<DnsInputProvider>().loadProfile(item.profile),
+              );
+            }).toList(),
           ),
           const SizedBox(height: 24),
           if (isDesktop)
@@ -176,39 +214,38 @@ class MainPage extends StatelessWidget {
     );
   }
 
-  Widget _buildChip(BuildContext context, DnsConfiguration p) {
-    final isSelected =
-        context.select<DnsInputProvider, bool>((i) => i.isInputMatch(p));
-    return ProfileChip(
-      label: p.name,
-      isSelected: isSelected,
-      onTap: () => context.read<DnsInputProvider>().loadProfile(p),
-    );
-  }
-
   Widget _saveActiveBtn(BuildContext context, ColorScheme cs) => MouseRegion(
         cursor: SystemMouseCursors.click,
         child: InkWell(
           onTap: () => showDialog(
-              context: context,
-              builder: (_) => ProfileEditor(
-                  profile: context.read<DnsProvider>().getSystemAsConfig())),
+            context: context,
+            builder: (_) => ProfileEditor(
+              profile: context.read<DnsProvider>().getSystemAsConfig(),
+            ),
+          ),
           borderRadius: BorderRadius.circular(4),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.1),
-                border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
-                borderRadius: BorderRadius.circular(4)),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.add_rounded, size: 14, color: cs.primary),
-              const SizedBox(width: 6),
-              Text("SAVE",
+              color: cs.primary.withValues(alpha: 0.1),
+              border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, size: 14, color: cs.primary),
+                const SizedBox(width: 6),
+                Text(
+                  "SAVE",
                   style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: cs.primary))
-            ]),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: cs.primary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -225,24 +262,30 @@ class MainPage extends StatelessWidget {
                 ? CrossAxisAlignment.start
                 : CrossAxisAlignment.center,
             children: values
-                .map((ip) => Text(ip,
-                    textAlign: isDesktop ? TextAlign.left : TextAlign.center,
-                    style: TextStyle(
+                .map((ip) => Text(
+                      ip,
+                      textAlign: isDesktop ? TextAlign.left : TextAlign.center,
+                      style: TextStyle(
                         fontSize: values.length > 1 ? 20 : 26,
                         fontWeight: FontWeight.bold,
                         fontFamily: 'Consolas',
-                        color: cs.onSurface)))
+                        color: cs.onSurface,
+                      ),
+                    ))
                 .toList(),
           ),
         ),
       );
 
-  Widget _label(String t, ColorScheme cs) => Text(t,
-      style: TextStyle(
+  Widget _label(String t, ColorScheme cs) => Text(
+        t,
+        style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w900,
           color: cs.onSurface.withValues(alpha: 0.3),
-          letterSpacing: 1.2));
+          letterSpacing: 1.2,
+        ),
+      );
 
   void _handleConnect(BuildContext context) {
     final input = context.read<DnsInputProvider>();
@@ -264,6 +307,8 @@ class MainPage extends StatelessWidget {
       config = DnsConfiguration(
         primaryDns: input.p4Controller.text.trim(),
         secondaryDns: input.s4Controller.text.trim(),
+        ipv6Primary: input.p6Controller.text.trim(),
+        ipv6Secondary: input.s6Controller.text.trim(),
       );
     }
     context
