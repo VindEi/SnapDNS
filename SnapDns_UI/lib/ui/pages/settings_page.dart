@@ -11,6 +11,7 @@ import '../widgets/common/update_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
@@ -23,13 +24,11 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     final s = context.read<SettingsProvider>();
     _hexController = TextEditingController(text: s.customHexPreview);
-
     s.addListener(_onSettingsChanged);
   }
 
   void _onSettingsChanged() {
     final s = context.read<SettingsProvider>();
-
     final currentInput =
         _hexController.text.replaceFirst('#', '').toUpperCase();
     final previewInput = s.customHexPreview.replaceFirst('#', '').toUpperCase();
@@ -113,7 +112,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 if (s.isDesktop)
                   SettingsSwitch(
                     title: "Disable IPv6 on Interface",
-                    subtitle: "Prevent IPv6 leaks .",
+                    subtitle:
+                        "Prevent IPv6 leaks and SmartDNS timeouts while connected.",
                     value: s.disableIpv6,
                     onChanged: s.toggleDisableIpv6,
                   ),
@@ -165,13 +165,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       "EXPORT",
                       Icons.upload_rounded,
                       () async {
+                        final toast = context.read<ToastProvider>();
                         final jsonString = jsonEncode(
                             dns.profiles.map((p) => p.toJson()).toList());
                         final success = await s.exportProfiles(jsonString);
                         if (mounted && success) {
-                          context
-                              .read<ToastProvider>()
-                              .showToast("PROFILES EXPORTED");
+                          toast.showToast("PROFILES EXPORTED");
                         }
                       },
                       accent,
@@ -263,20 +262,17 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  String currentAccent(SettingsProvider s) =>
-      s.isAdaptive ? "ADAPTIVE" : s.accentColor.toHex();
-
   Widget _buildAccentPicker(SettingsProvider s, ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("ACCENT COLOR",
-              style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.grey)),
+          const Text(
+            "ACCENT COLOR",
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey),
+          ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -304,8 +300,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 filled: true,
                 fillColor: cs.onSurface.withValues(alpha: 0.02),
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: BorderSide.none),
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
           ),
@@ -315,7 +312,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _adaptiveCircle(SettingsProvider s) {
-    bool isSelected = s.isAdaptive;
+    final bool isSelected = s.isAdaptive;
     return InkWell(
       onTap: () => s.setAdaptiveAccent(),
       borderRadius: BorderRadius.circular(20),
@@ -323,15 +320,15 @@ class _SettingsPageState extends State<SettingsPage> {
         width: 24,
         height: 24,
         decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Colors.white, Colors.black],
-              stops: [0.5, 0.5],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border:
-                isSelected ? Border.all(color: Colors.grey, width: 2) : null),
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [Colors.white, Colors.black],
+            stops: [0.5, 0.5],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: isSelected ? Border.all(color: Colors.grey, width: 2) : null,
+        ),
         child: isSelected
             ? const Icon(Icons.check, size: 12, color: Colors.grey)
             : null,
@@ -340,8 +337,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _customHexCircle(SettingsProvider s) {
-    Color liveColor = HexColor.fromHex(s.customHexPreview);
-    bool isSelected = s.isCustomColor;
+    final Color liveColor = HexColor.fromHex(s.customHexPreview);
+    final bool isSelected = s.isCustomColor;
     return InkWell(
       onTap: () => s.applyCustomHex(),
       borderRadius: BorderRadius.circular(20),
@@ -349,10 +346,10 @@ class _SettingsPageState extends State<SettingsPage> {
         width: 24,
         height: 24,
         decoration: BoxDecoration(
-            color: liveColor,
-            shape: BoxShape.circle,
-            border:
-                isSelected ? Border.all(color: Colors.white, width: 2) : null),
+          color: liveColor,
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+        ),
         child: isSelected
             ? const Icon(Icons.check, size: 12, color: Colors.white)
             : null,
@@ -361,7 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _colorCircle(SettingsProvider s, Color color) {
-    bool isSelected =
+    final bool isSelected =
         !s.isAdaptive && s.accentColor.toARGB32() == color.toARGB32();
     return InkWell(
       onTap: () => s.updateAccentColor(color),
@@ -370,10 +367,10 @@ class _SettingsPageState extends State<SettingsPage> {
         width: 24,
         height: 24,
         decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border:
-                isSelected ? Border.all(color: Colors.white, width: 2) : null),
+          color: color,
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+        ),
         child: isSelected
             ? const Icon(Icons.check, size: 12, color: Colors.white)
             : null,
@@ -401,11 +398,11 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 Icon(icon, size: 16, color: color),
                 const SizedBox(width: 10),
-                Text(label,
-                    style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 10)),
+                Text(
+                  label,
+                  style: TextStyle(
+                      color: color, fontWeight: FontWeight.w900, fontSize: 10),
+                ),
               ],
             ),
           ),
@@ -426,21 +423,26 @@ class _SettingsPageState extends State<SettingsPage> {
 class _Label extends StatelessWidget {
   final String text;
   const _Label({required this.text});
+
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text(text,
-            style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-                color: Colors.grey,
-                letterSpacing: 1.5)),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            color: Colors.grey,
+            letterSpacing: 1.5,
+          ),
+        ),
       );
 }
 
 class _Card extends StatelessWidget {
   final List<Widget> children;
   const _Card(this.children);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -450,9 +452,10 @@ class _Card extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Container(
         decoration: BoxDecoration(
-            border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.1)),
-            borderRadius: BorderRadius.circular(4)),
+          border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.1)),
+          borderRadius: BorderRadius.circular(4),
+        ),
         child: Column(children: children),
       ),
     );
