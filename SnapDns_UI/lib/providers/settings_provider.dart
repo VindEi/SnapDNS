@@ -258,6 +258,9 @@ class SettingsProvider extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 150));
 
         await windowManager.setIcon(paths['taskbar']!);
+        if (Platform.isWindows) {
+          IconEngine.applyWindowIconNative(paths['taskbar']!);
+        }
         AppTrayManager().setTrayPath(paths['tray']!);
       }
     } catch (e) {

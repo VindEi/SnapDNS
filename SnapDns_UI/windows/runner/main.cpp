@@ -1,6 +1,7 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <shobjidl.h>
 #include <vector>
 #include <string>
 
@@ -42,6 +43,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // Initialize COM, so that it is available for use in the library and/or plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  ::SetCurrentProcessExplicitAppUserModelID(L"me.vinde.snapdns");
 
   flutter::DartProject project(L"data");
 

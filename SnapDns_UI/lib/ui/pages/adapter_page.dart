@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/dns_provider.dart';
 import '../widgets/adapters/adapter_tile.dart';
+import '../widgets/common/precision_back_button.dart';
 
 class AdapterPage extends StatelessWidget {
   const AdapterPage({super.key});
@@ -20,7 +21,7 @@ class AdapterPage extends StatelessWidget {
         automaticallyImplyLeading: false,
         title: Row(
           children: [
-            _PrecisionBackButton(onTap: () => Navigator.pop(context)),
+            PrecisionBackButton(onTap: () => Navigator.pop(context)),
             const Expanded(
               child: Center(
                 child: Text(
@@ -73,7 +74,7 @@ class AdapterPage extends StatelessWidget {
                             dns.readableAdapterName.toLowerCase() ==
                                 adapter.toLowerCase();
                         return AdapterTile(
-                          title: adapter,
+                           title: adapter,
                           subtitle: _getAdapterType(adapter),
                           isSelected: isSelected,
                           badge:
@@ -129,49 +130,5 @@ class AdapterPage extends StatelessWidget {
     if (n.contains("wi-fi") || n.contains("wlan")) return "Wireless Connection";
     if (n.contains("ethernet") || n.contains("lan")) return "Wired Connection";
     return "Network Interface";
-  }
-}
-
-class _PrecisionBackButton extends StatefulWidget {
-  final VoidCallback onTap;
-  const _PrecisionBackButton({required this.onTap});
-
-  @override
-  State<_PrecisionBackButton> createState() => _PrecisionBackButtonState();
-}
-
-class _PrecisionBackButtonState extends State<_PrecisionBackButton> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? colorScheme.onSurface.withValues(alpha: 0.05)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 14,
-            color: _isHovered
-                ? colorScheme.onSurface
-                : colorScheme.onSurface.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-    );
   }
 }

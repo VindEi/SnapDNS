@@ -8,33 +8,56 @@ import 'package:flutter/foundation.dart';
 import '../models/pipe_models.dart';
 import '../core/constants.dart';
 
-final _kernel32 = DynamicLibrary.open('kernel32.dll');
+abstract class _Win32Pipe {
+  static final DynamicLibrary _kernel32 = DynamicLibrary.open('kernel32.dll');
 
-final _createFileW = _kernel32.lookupFunction<
-    Pointer<Void> Function(Pointer<Utf16>, Uint32, Uint32, Pointer<Void>,
-        Uint32, Uint32, Pointer<Void>),
-    Pointer<Void> Function(Pointer<Utf16>, int, int, Pointer<Void>, int, int,
-        Pointer<Void>)>('CreateFileW');
+  static final Pointer<Void> Function(
+    Pointer<Utf16>,
+    int,
+    int,
+    Pointer<Void>,
+    int,
+    int,
+    Pointer<Void>,
+  ) createFileW = _kernel32.lookupFunction<
+      Pointer<Void> Function(Pointer<Utf16>, Uint32, Uint32, Pointer<Void>,
+          Uint32, Uint32, Pointer<Void>),
+      Pointer<Void> Function(Pointer<Utf16>, int, int, Pointer<Void>, int, int,
+          Pointer<Void>)>('CreateFileW');
 
-final _writeFile = _kernel32.lookupFunction<
-    Int32 Function(
-        Pointer<Void>, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>),
-    int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>,
-        Pointer<Void>)>('WriteFile');
+  static final int Function(
+    Pointer<Void>,
+    Pointer<Uint8>,
+    int,
+    Pointer<Uint32>,
+    Pointer<Void>,
+  ) writeFile = _kernel32.lookupFunction<
+      Int32 Function(Pointer<Void>, Pointer<Uint8>, Uint32, Pointer<Uint32>,
+          Pointer<Void>),
+      int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>,
+          Pointer<Void>)>('WriteFile');
 
-final _readFile = _kernel32.lookupFunction<
-    Int32 Function(
-        Pointer<Void>, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>),
-    int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>,
-        Pointer<Void>)>('ReadFile');
+  static final int Function(
+    Pointer<Void>,
+    Pointer<Uint8>,
+    int,
+    Pointer<Uint32>,
+    Pointer<Void>,
+  ) readFile = _kernel32.lookupFunction<
+      Int32 Function(Pointer<Void>, Pointer<Uint8>, Uint32, Pointer<Uint32>,
+          Pointer<Void>),
+      int Function(Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint32>,
+          Pointer<Void>)>('ReadFile');
 
-final _closeHandle = _kernel32.lookupFunction<Int32 Function(Pointer<Void>),
-    int Function(Pointer<Void>)>('CloseHandle');
+  static final int Function(Pointer<Void>) closeHandle = _kernel32
+      .lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>(
+          'CloseHandle');
 
-const int genericRead = 0x80000000;
-const int genericWrite = 0x40000000;
-const int openExisting = 3;
-final Pointer<Void> invalidHandleValue = Pointer<Void>.fromAddress(-1);
+  static const int genericRead = 0x80000000;
+  static const int genericWrite = 0x40000000;
+  static const int openExisting = 3;
+  static final Pointer<Void> invalidHandleValue = Pointer<Void>.fromAddress(-1);
+}
 
 class IpcClient {
   static final _SimpleMutex _lock = _SimpleMutex();
@@ -52,17 +75,23 @@ class IpcClient {
   static PipeResponse _transferWindows(PipeRequest request) {
     return using((Arena arena) {
       final pName = AppConstants.pipeName.toNativeUtf16(allocator: arena);
-      Pointer<Void> hPipe = invalidHandleValue;
+      Pointer<Void> hPipe = _Win32Pipe.invalidHandleValue;
 
       try {
         for (int i = 0; i < 3; i++) {
-          hPipe = _createFileW(pName, genericRead | genericWrite, 0, nullptr,
-              openExisting, 0, nullptr);
-          if (hPipe.address != invalidHandleValue.address) break;
+          hPipe = _Win32Pipe.createFileW(
+              pName,
+              _Win32Pipe.genericRead | _Win32Pipe.genericWrite,
+              0,
+              nullptr,
+              _Win32Pipe.openExisting,
+              0,
+              nullptr);
+          if (hPipe.address != _Win32Pipe.invalidHandleValue.address) break;
           sleep(const Duration(milliseconds: 100));
         }
 
-        if (hPipe.address == invalidHandleValue.address) {
+        if (hPipe.address == _Win32Pipe.invalidHandleValue.address) {
           return PipeResponse(success: false, message: "Offline");
         }
 
@@ -78,12 +107,12 @@ class IpcClient {
         Pointer<Uint8> pHeaderBuf = arena<Uint8>(4);
         Pointer<Uint32> dwRead = arena<Uint32>();
 
-        if (_writeFile(
+        if (_Win32Pipe.writeFile(
                 hPipe, pWriteBuf, writeData.length, dwWritten, nullptr) ==
             0) {
           throw "Pipe Write Error";
         }
-        if (_readFile(hPipe, pHeaderBuf, 4, dwRead, nullptr) == 0) {
+        if (_Win32Pipe.readFile(hPipe, pHeaderBuf, 4, dwRead, nullptr) == 0) {
           throw "Pipe Header Error";
         }
 
@@ -92,7 +121,7 @@ class IpcClient {
         if (resLen <= 0 || resLen > 1024 * 1024) throw "Invalid Payload Size";
 
         Pointer<Uint8> pResBuf = arena<Uint8>(resLen);
-        if (_readFile(hPipe, pResBuf, resLen, dwRead, nullptr) == 0) {
+        if (_Win32Pipe.readFile(hPipe, pResBuf, resLen, dwRead, nullptr) == 0) {
           throw "Pipe Body Error";
         }
 
@@ -102,7 +131,9 @@ class IpcClient {
         debugPrint("IPC Windows Error: $e");
         return PipeResponse(success: false, message: "Comm Error");
       } finally {
-        if (hPipe.address != invalidHandleValue.address) _closeHandle(hPipe);
+        if (hPipe.address != _Win32Pipe.invalidHandleValue.address) {
+          _Win32Pipe.closeHandle(hPipe);
+        }
       }
     });
   }

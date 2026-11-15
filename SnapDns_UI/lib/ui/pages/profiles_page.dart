@@ -1,3 +1,4 @@
+import '../../providers/settings_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/dns_configuration.dart';
@@ -277,7 +278,7 @@ class _TechFab extends StatelessWidget {
             ),
             child: Icon(
               icon,
-              color: isAccent ? Colors.black : cs.primary,
+              color: isAccent ? cs.primary.contrastColor : cs.primary,
               size: 20,
             ),
           ),

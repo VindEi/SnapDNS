@@ -54,7 +54,7 @@ The C# background service runs as a system daemon and serves as a low-overhead D
 3. **DNS-over-TLS (DoT) Pipeline:**
    Incoming UDP queries are prefixed with a 2-byte Big-Endian length header (RFC 7858) and forwarded over a persistent `SslStream` on Port 853. Write-and-read operations are serialized using `SemaphoreSlim` to prevent packet interleaving, allowing multiple concurrent client lookups to safely reuse a single active TLS tunnel.
 4. **Bootstrap Resolution & Deadlock Prevention:**
-   When the target adapter's primary DNS is set to `127.0.0.1`, attempting to resolve a secure hostname (e.g., `cloudflare-dns.com`) using standard system APIs triggers a recursive circular lookup deadlock. To bypass this, the C# engine uses a lightweight, custom, zero-dependency UDP resolver to query root servers (`1.1.1.1` and `8.8.8.8`) directly, acquiring the bootstrap IP address of the secure host before spawning the HTTPS/TLS stream.
+   When the target adapter's primary DNS is set to `127.0.0.1`, attempting to resolve a secure hostname (e.g., `cloudflare-dns.com`) using standard system APIs triggers a recursive circular lookup deadlock. To bypass this, the C# engine uses a lightweight, custom, zero-dependency UDP resolver to query the profile's bootstrap DNS servers directly, acquiring the bootstrap IP address of the secure host before spawning the HTTPS/TLS stream.
 5. **Windows IPv6 Leak Block:**
    Windows heavily prioritizes active DHCP-assigned IPv6 DNS servers over local IPv4 loopbacks (`127.0.0.1`). When setting the IPv4 DNS to loopback, the C# service automatically purges all IPv6 DNS configurations on the target interface using `netsh interface ipv6 delete dnsservers` to force all DNS traffic through the secure proxy.
 

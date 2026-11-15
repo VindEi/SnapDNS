@@ -21,44 +21,29 @@ class SnapDnsTileService : TileService() {
                 action = "STOP"
             }
             startService(stopIntent)
+            updateTileState(running = false)
         } else {
-            val prefs = getSharedPreferences("SnapDnsPrefs", Context.MODE_PRIVATE)
-            val primary = prefs.getString("primaryDns", "1.1.1.1") ?: "1.1.1.1"
-            val secondary = prefs.getString("secondaryDns", null)
-            val privateDns = prefs.getString("privateDns", null)
-            val dohUrl = prefs.getString("dohUrl", null)
+            val prefs = getSharedPreferences(SnapDnsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+            val primary = prefs.getString(SnapDnsConstants.KEY_PRIMARY_DNS, SnapDnsConstants.DEFAULT_PRIMARY_DNS) ?: SnapDnsConstants.DEFAULT_PRIMARY_DNS
+            val secondary = prefs.getString(SnapDnsConstants.KEY_SECONDARY_DNS, null)
+            val privateDns = prefs.getString(SnapDnsConstants.KEY_PRIVATE_DNS, null)
+            val dohUrl = prefs.getString(SnapDnsConstants.KEY_DOH_URL, null)
             
-            // FIX: Load pre-resolved host details to prevent loopback deadlocks on Quick Tile toggles
-            val hostName = prefs.getString("hostName", null)
-            val resolvedIpsSet = prefs.getStringSet("resolvedIps", null)
+            // Load pre-resolved host details to prevent loopback deadlocks on Quick Tile toggles
+            val hostName = prefs.getString(SnapDnsConstants.KEY_HOST_NAME, null)
+            val resolvedIpsSet = prefs.getStringSet(SnapDnsConstants.KEY_RESOLVED_IPS, null)
             val resolvedIps = resolvedIpsSet?.let { ArrayList(it) }
 
-            val startIntent = Intent(this, DnsVpnService::class.java).apply {
-                putExtra("primaryDns", primary)
-                putExtra("secondaryDns", secondary)
-                putExtra("privateDns", privateDns)
-                putExtra("dohUrl", dohUrl)
-                putExtra("hostName", hostName)
-                if (resolvedIps != null) {
-                    putStringArrayListExtra("resolvedIps", resolvedIps)
-                }
-            }
+            val startIntent = SnapDnsConstants.buildVpnIntent(
+                this, primary, secondary, privateDns, dohUrl, hostName, resolvedIps
+            )
             startService(startIntent)
+            updateTileState(running = true)
         }
-
-        try {
-            Thread.sleep(150)
-        } catch (e: Exception) {
-            // Handled
-        }
-        
-        updateTileState()
     }
 
-    private fun updateTileState() {
+    private fun updateTileState(running: Boolean = DnsVpnService.isRunning) {
         val tile = qsTile ?: return
-        val running = DnsVpnService.isRunning
-
         if (running) {
             tile.state = Tile.STATE_ACTIVE
             tile.label = "SnapDNS (On)"

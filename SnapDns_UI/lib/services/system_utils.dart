@@ -4,6 +4,12 @@ import 'package:flutter/services.dart';
 import '../models/dns_configuration.dart';
 
 class SystemUtils {
+  static final Uint8List _dnsPingQuery = Uint8List.fromList([
+    0x24, 0x1a, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00,
+    0x00, 0x01, 0x00, 0x01
+  ]);
+
   static Future<void> restartService() async {
     if (Platform.isWindows) {
       await Process.run('powershell', [
@@ -13,7 +19,6 @@ class SystemUtils {
     } else if (Platform.isLinux) {
       await Process.run('pkexec', ['systemctl', 'restart', 'snapdns']);
     } else if (Platform.isMacOS) {
-      // FIX: Aligned daemon kickstart identifier with your official me.vinde.snapdns namespace
       await Process.run('osascript', [
         '-e',
         'do shell script "launchctl kickstart -k system/me.vinde.snapdns" with administrator privileges'
@@ -24,6 +29,18 @@ class SystemUtils {
   static void copyToClipboard(String text) {
     if (text.isNotEmpty && text != "---") {
       Clipboard.setData(ClipboardData(text: text));
+    }
+  }
+
+  static Future<InternetAddress?> _resolveTarget(String host) async {
+    final direct = InternetAddress.tryParse(host);
+    if (direct != null) return direct;
+    try {
+      final lookup = await InternetAddress.lookup(host)
+          .timeout(const Duration(milliseconds: 1000));
+      return lookup.isNotEmpty ? lookup.first : null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -65,50 +82,14 @@ class SystemUtils {
   static Future<int> _pingUdp(String host, int port) async {
     RawDatagramSocket? socket;
     try {
-      InternetAddress? targetIp = InternetAddress.tryParse(host);
-      if (targetIp == null) {
-        final lookup = await InternetAddress.lookup(host)
-            .timeout(const Duration(milliseconds: 1000));
-        if (lookup.isEmpty) return -1;
-        targetIp = lookup.first;
-      }
+      final targetIp = await _resolveTarget(host);
+      if (targetIp == null) return -1;
 
       socket = await RawDatagramSocket.bind(
           targetIp.type == InternetAddressType.IPv6
               ? InternetAddress.anyIPv6
               : InternetAddress.anyIPv4,
           0);
-
-      final query = Uint8List.fromList([
-        0x24,
-        0x1a,
-        0x01,
-        0x00,
-        0x00,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x06,
-        0x67,
-        0x6f,
-        0x6f,
-        0x67,
-        0x6c,
-        0x65,
-        0x03,
-        0x63,
-        0x6f,
-        0x6d,
-        0x00,
-        0x00,
-        0x01,
-        0x00,
-        0x01
-      ]);
 
       final completer = Completer<int>();
       final sw = Stopwatch();
@@ -126,7 +107,7 @@ class SystemUtils {
       });
 
       sw.start();
-      socket.send(query, targetIp, port);
+      socket.send(_dnsPingQuery, targetIp, port);
 
       Future.delayed(const Duration(milliseconds: 1500), () {
         if (!completer.isCompleted) {
@@ -146,13 +127,8 @@ class SystemUtils {
   static Future<int> _pingTcp(String host, int port) async {
     Socket? s;
     try {
-      InternetAddress? targetIp = InternetAddress.tryParse(host);
-      if (targetIp == null) {
-        final lookup = await InternetAddress.lookup(host)
-            .timeout(const Duration(milliseconds: 1000));
-        if (lookup.isEmpty) return -1;
-        targetIp = lookup.first;
-      }
+      final targetIp = await _resolveTarget(host);
+      if (targetIp == null) return -1;
 
       final sw = Stopwatch();
       sw.start();

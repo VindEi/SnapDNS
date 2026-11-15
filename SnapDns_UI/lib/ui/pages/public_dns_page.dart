@@ -8,6 +8,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../services/public_dns_service.dart';
 import '../../services/system_utils.dart';
+import '../widgets/common/precision_back_button.dart';
 
 class PublicDnsPage extends StatefulWidget {
   const PublicDnsPage({super.key});
@@ -226,7 +227,7 @@ class _PublicDnsPageState extends State<PublicDnsPage> {
           child: Row(
             children: [
               const SizedBox(width: 8),
-              _PrecisionBackButton(onTap: () => Navigator.pop(context)),
+              PrecisionBackButton(onTap: () => Navigator.pop(context)),
               Expanded(
                 child: DragToMoveArea(
                   child: Container(
@@ -986,46 +987,3 @@ class _PublicDnsPageState extends State<PublicDnsPage> {
   }
 }
 
-class _PrecisionBackButton extends StatefulWidget {
-  final VoidCallback onTap;
-  const _PrecisionBackButton({required this.onTap});
-
-  @override
-  State<_PrecisionBackButton> createState() => _PrecisionBackButtonState();
-}
-
-class _PrecisionBackButtonState extends State<_PrecisionBackButton> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? colorScheme.onSurface.withValues(alpha: 0.05)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 14,
-            color: _isHovered
-                ? colorScheme.onSurface
-                : colorScheme.onSurface.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-    );
-  }
-}

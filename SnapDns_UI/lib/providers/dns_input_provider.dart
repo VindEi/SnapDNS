@@ -110,7 +110,7 @@ class DnsInputProvider extends ChangeNotifier {
       return text ==
           (activeSecureType == SecureType.doh ? p.dohUrl : p.dotHostname);
     } else {
-      return text == p.primaryDns;
+      return text == (activeIpType == IpType.v4 ? p.primaryDns : p.ipv6Primary);
     }
   }
 

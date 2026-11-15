@@ -26,16 +26,6 @@ class DnsVpnService : VpnService() {
     companion object {
         @Volatile
         var isRunning = false
-
-        private val StaticHosts = mapOf(
-            "cloudflare-dns.com" to listOf("1.1.1.1", "1.0.0.1"),
-            "one.one.one.one" to listOf("1.1.1.1", "1.0.0.1"),
-            "dns.google" to listOf("8.8.8.8", "8.8.4.4"),
-            "dns.quad9.net" to listOf("9.9.9.9", "149.112.112.112"),
-            "dns.adguard-dns.com" to listOf("94.140.14.14", "94.140.15.15"),
-            "free.shecan.ir" to listOf("178.22.122.100", "185.51.200.2"),
-            "dns.electrotm.org" to listOf("78.157.42.100", "78.157.42.101")
-        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -47,12 +37,12 @@ class DnsVpnService : VpnService() {
             return START_NOT_STICKY
         }
 
-        val primaryDns = intent.getStringExtra("primaryDns") ?: "1.1.1.1"
-        val secondaryDns = intent.getStringExtra("secondaryDns")
-        val privateDns = intent.getStringExtra("privateDns")
-        val dohUrl = intent.getStringExtra("dohUrl")
-        val hostName = intent.getStringExtra("hostName")
-        val resolvedIps = intent.getStringArrayListExtra("resolvedIps")
+        val primaryDns = intent.getStringExtra(SnapDnsConstants.KEY_PRIMARY_DNS) ?: SnapDnsConstants.DEFAULT_PRIMARY_DNS
+        val secondaryDns = intent.getStringExtra(SnapDnsConstants.KEY_SECONDARY_DNS)
+        val privateDns = intent.getStringExtra(SnapDnsConstants.KEY_PRIVATE_DNS)
+        val dohUrl = intent.getStringExtra(SnapDnsConstants.KEY_DOH_URL)
+        val hostName = intent.getStringExtra(SnapDnsConstants.KEY_HOST_NAME)
+        val resolvedIps = intent.getStringArrayListExtra(SnapDnsConstants.KEY_RESOLVED_IPS)
 
         try {
             stopVpn() 
@@ -71,7 +61,8 @@ class DnsVpnService : VpnService() {
             }
             vpnThread?.start()
 
-            isRunning = true 
+            isRunning = true
+            SnapDnsConstants.requestTileUpdate(this)
             Log.i("DnsVpnService", "DNS VPN active.")
         } catch (e: Exception) {
             isRunning = false
@@ -88,7 +79,7 @@ class DnsVpnService : VpnService() {
         
         val buffer = ByteBuffer.allocate(16384)
         val threadPool = java.util.concurrent.Executors.newFixedThreadPool(8)
-        val resolvedIp = resolvedIps?.firstOrNull()
+        val resolvedIp = resolvedIps?.firstOrNull() ?: if (primaryDns.isNotEmpty() && primaryDns != "10.0.0.1" && primaryDns != "127.0.0.1") primaryDns else null
 
         while (vpnInterface != null && !Thread.currentThread().isInterrupted) {
             try {
@@ -152,7 +143,7 @@ class DnsVpnService : VpnService() {
 
     private fun forwardToDoh(query: ByteArray, urlStr: String, resolvedIp: String?, host: String): ByteArray? {
         try {
-            val ipAddress = StaticHosts[host]?.firstOrNull() ?: resolvedIp
+            val ipAddress = resolvedIp
 
             val finalUrlStr = if (!ipAddress.isNullOrEmpty()) {
                 urlStr.replace(host, ipAddress)
@@ -378,7 +369,8 @@ class DnsVpnService : VpnService() {
     }
 
     private fun stopVpn() {
-        isRunning = false 
+        isRunning = false
+        SnapDnsConstants.requestTileUpdate(this)
         vpnThread?.interrupt()
         vpnThread = null
         closeDotSocket()

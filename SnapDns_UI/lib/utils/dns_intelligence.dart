@@ -2,6 +2,17 @@ import 'dart:convert';
 import '../models/dns_configuration.dart';
 
 class DnsIntelligence {
+  static final RegExp _ipv4Regex = RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b');
+  static final RegExp _ipv6Regex = RegExp(
+    r'(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|:(:[0-9a-fA-F]{1,4}){1,7})',
+  );
+  static final RegExp _urlRegex = RegExp(r'https?://[^\s/$.?#].[^\s]*');
+  static final RegExp _dotRegex = RegExp(
+    r'(?:dot|tls|host):\s*([a-zA-Z0-9.-]+)',
+    caseSensitive: false,
+  );
+  static final RegExp _cleanUrlRegex = RegExp(r'[),.;]+$');
+
   static final List<DnsConfiguration> defaultProfiles = [
     DnsConfiguration(
       name: "Cloudflare",
@@ -81,21 +92,11 @@ class DnsIntelligence {
   }
 
   static DnsConfiguration? parseHumanText(String input) {
-    final ipv4Regex = RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b');
-    final ipv6Regex = RegExp(
-      r'(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|:(:[0-9a-fA-F]{1,4}){1,7})',
-    );
-    final urlRegex = RegExp(r'https?://[^\s/$.?#].[^\s]*');
-    final dotRegex = RegExp(
-      r'(?:dot|tls|host):\s*([a-zA-Z0-9.-]+)',
-      caseSensitive: false,
-    );
-
-    final ipv4s = ipv4Regex.allMatches(input).map((m) => m.group(0)!).toList();
-    final ipv6s = ipv6Regex.allMatches(input).map((m) => m.group(0)!).toList();
+    final ipv4s = _ipv4Regex.allMatches(input).map((m) => m.group(0)!).toList();
+    final ipv6s = _ipv6Regex.allMatches(input).map((m) => m.group(0)!).toList();
     final urls =
-        urlRegex.allMatches(input).map((m) => _cleanUrl(m.group(0)!)).toList();
-    final dots = dotRegex.allMatches(input).map((m) => m.group(1)!).toList();
+        _urlRegex.allMatches(input).map((m) => _cleanUrl(m.group(0)!)).toList();
+    final dots = _dotRegex.allMatches(input).map((m) => m.group(1)!).toList();
 
     if (ipv4s.isEmpty && ipv6s.isEmpty && urls.isEmpty && dots.isEmpty) {
       return null;
@@ -113,7 +114,7 @@ class DnsIntelligence {
   }
 
   static String _cleanUrl(String url) {
-    return url.replaceAll(RegExp(r'["\x27,;\}$\]]+$'), '').trim();
+    return url.replaceAll(_cleanUrlRegex, '').trim();
   }
 
   static String formatForSharing(DnsConfiguration c) {

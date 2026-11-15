@@ -1,12 +1,59 @@
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as p;
 import '../core/constants.dart';
 
+abstract class _Win32IconHelper {
+  static final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
+
+  static final int Function(Pointer<Utf16>, Pointer<Utf16>) findWindowW =
+      _user32.lookupFunction<
+          IntPtr Function(Pointer<Utf16>, Pointer<Utf16>),
+          int Function(Pointer<Utf16>, Pointer<Utf16>)>('FindWindowW');
+
+  static final int Function(int) getSystemMetrics = _user32.lookupFunction<
+      Int32 Function(Int32), int Function(int)>('GetSystemMetrics');
+
+  static final int Function(int, Pointer<Utf16>, int, int, int, int)
+      loadImageW = _user32.lookupFunction<
+          IntPtr Function(
+              IntPtr, Pointer<Utf16>, Uint32, Int32, Int32, Uint32),
+          int Function(
+              int, Pointer<Utf16>, int, int, int, int)>('LoadImageW');
+
+  static final int Function(int, int, int, int) sendMessageW =
+      _user32.lookupFunction<IntPtr Function(IntPtr, Uint32, IntPtr, IntPtr),
+          int Function(int, int, int, int)>('SendMessageW');
+}
+
+const int _smCxIcon = 11;
+const int _smCyIcon = 12;
+const int _smCxSmIcon = 49;
+const int _smCySmIcon = 50;
+const int _imageIcon = 1;
+const int _lrLoadFromFile = 0x00000010;
+const int _wmSetIcon = 0x0080;
+const int _iconSmall = 0;
+const int _iconBig = 1;
+
 class IconEngine {
+  static const List<int> standardIconSizes = [
+    256,
+    128,
+    64,
+    48,
+    40,
+    32,
+    24,
+    20,
+    16
+  ];
+
   static String applyColors(String rawSvg, String fillHex, String strokeHex) {
     return rawSvg
         .replaceAll(
@@ -33,19 +80,19 @@ class IconEngine {
 
       final fillHex =
           '#${accentColor.toARGB32().toRadixString(16).substring(2).toLowerCase()}';
-      final strokeHex = isDark ? '#bbbbbb' : '#444444';
+      final strokeHex = fillHex;
 
       String processed = applyColors(rawSvg, fillHex, strokeHex);
 
       if (Platform.isWindows) {
         final String cleanHex = fillHex.replaceFirst('#', '');
         final String iconName =
-            'app_icon_${cleanHex}_${isDark ? "dark" : "light"}.ico';
+            'app_icon_${cleanHex}_${isDark ? "dark" : "light"}_v210.ico';
         final String icoPath = p.join(iconDirPath, iconName);
 
         if (!File(icoPath).existsSync()) {
-          final Uint8List icoBytes = await _generateProperIco(
-              processed, [256, 128, 64, 48, 32, 24, 16]);
+          final Uint8List icoBytes =
+              await _generateProperIco(processed, standardIconSizes);
           File(icoPath).writeAsBytesSync(icoBytes, flush: true);
 
           try {
@@ -72,6 +119,40 @@ class IconEngine {
     }
   }
 
+  static void applyWindowIconNative(String icoPath) {
+    if (!Platform.isWindows) return;
+    try {
+      final title1 = 'SnapDNS'.toNativeUtf16();
+      final title2 = 'SnapDNS '.toNativeUtf16();
+      int hWnd = _Win32IconHelper.findWindowW(nullptr, title1);
+      if (hWnd == 0) hWnd = _Win32IconHelper.findWindowW(nullptr, title2);
+      malloc.free(title1);
+      malloc.free(title2);
+
+      if (hWnd != 0) {
+        final pathPtr = icoPath.toNativeUtf16();
+        final cxBig = _Win32IconHelper.getSystemMetrics(_smCxIcon);
+        final cyBig = _Win32IconHelper.getSystemMetrics(_smCyIcon);
+        final cxSm = _Win32IconHelper.getSystemMetrics(_smCxSmIcon);
+        final cySm = _Win32IconHelper.getSystemMetrics(_smCySmIcon);
+
+        final hBig = _Win32IconHelper.loadImageW(
+            0, pathPtr, _imageIcon, cxBig, cyBig, _lrLoadFromFile);
+        if (hBig != 0) {
+          _Win32IconHelper.sendMessageW(hWnd, _wmSetIcon, _iconBig, hBig);
+        }
+        final hSm = _Win32IconHelper.loadImageW(
+            0, pathPtr, _imageIcon, cxSm, cySm, _lrLoadFromFile);
+        if (hSm != 0) {
+          _Win32IconHelper.sendMessageW(hWnd, _wmSetIcon, _iconSmall, hSm);
+        }
+        malloc.free(pathPtr);
+      }
+    } catch (e) {
+      debugPrint("DEBUG: [IconNative] Apply Error: $e");
+    }
+  }
+
   static Future<Uint8List> _generateProperIco(
       String svg, List<int> sizes) async {
     final List<Uint8List> imageData = [];
@@ -86,84 +167,14 @@ class IconEngine {
       c.drawPicture(pictureInfo.picture);
       final ui.Image rendered = await rec.endRecording().toImage(dim, dim);
 
-      if (dim >= 128) {
-        final byteData =
-            await rendered.toByteData(format: ui.ImageByteFormat.png);
-        imageData.add(byteData!.buffer.asUint8List());
-      } else {
-        final byteData =
-            await rendered.toByteData(format: ui.ImageByteFormat.rawRgba);
-        final rgba = byteData!.buffer.asUint8List();
-
-        int xorSize = dim * dim * 4;
-        int andRowBytes = ((dim + 31) ~/ 32) * 4;
-        int andSize = andRowBytes * dim;
-
-        final dib = Uint8List(40 + xorSize + andSize);
-        final bd = ByteData.view(dib.buffer);
-
-        bd.setUint32(0, 40, Endian.little);
-        bd.setUint32(4, dim, Endian.little);
-        bd.setUint32(8, dim * 2, Endian.little);
-        bd.setUint16(12, 1, Endian.little);
-        bd.setUint16(14, 32, Endian.little);
-        bd.setUint32(16, 0, Endian.little);
-        bd.setUint32(20, xorSize + andSize, Endian.little);
-        bd.setUint32(24, 0, Endian.little);
-        bd.setUint32(28, 0, Endian.little);
-        bd.setUint32(32, 0, Endian.little);
-        bd.setUint32(36, 0, Endian.little);
-
-        int offset = 40;
-        for (int y = dim - 1; y >= 0; y--) {
-          for (int x = 0; x < dim; x++) {
-            int srcIndex = (y * dim + x) * 4;
-            int r = rgba[srcIndex];
-            int g = rgba[srcIndex + 1];
-            int b = rgba[srcIndex + 2];
-            int a = rgba[srcIndex + 3];
-
-            dib[offset++] = b;
-            dib[offset++] = g;
-            dib[offset++] = r;
-            dib[offset++] = a;
-          }
-        }
-
-        int andOffset = 40 + xorSize;
-        for (int y = dim - 1; y >= 0; y--) {
-          int byteVal = 0;
-          int bytePixelCount = 0;
-          int bytesWrittenInRow = 0;
-
-          for (int x = 0; x < dim; x++) {
-            int srcIndex = (y * dim + x) * 4;
-            int a = rgba[srcIndex + 3];
-
-            int bit = (a < 128) ? 1 : 0;
-            int bitPos = 7 - bytePixelCount;
-            byteVal |= (bit << bitPos);
-            bytePixelCount++;
-
-            if (bytePixelCount == 8 || x == dim - 1) {
-              dib[andOffset + bytesWrittenInRow] = byteVal;
-              bytesWrittenInRow++;
-              byteVal = 0;
-              bytePixelCount = 0;
-            }
-          }
-          while (bytesWrittenInRow < andRowBytes) {
-            dib[andOffset + bytesWrittenInRow] = 0;
-            bytesWrittenInRow++;
-          }
-          andOffset += andRowBytes;
-        }
-
-        imageData.add(dib);
+      final byteData =
+          await rendered.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        imageData.add(byteData.buffer.asUint8List());
       }
     }
 
-    int numImages = sizes.length;
+    int numImages = imageData.length;
     int headerSize = 6 + (16 * numImages);
     int totalSize = headerSize;
     for (var d in imageData) {

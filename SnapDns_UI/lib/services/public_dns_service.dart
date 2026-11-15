@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as p;
 import '../core/constants.dart';
 import '../models/public_dns.dart';
 
@@ -13,8 +12,7 @@ class PublicDnsService {
   static const String _rawFallbackUrl =
       'https://raw.githubusercontent.com/VindEi/public-dns-directory/data/index.json';
 
-  static String get _cacheFilePath =>
-      p.join(AppConstants.appDataPath, 'public_dns_cache.json');
+  static String get _cacheFilePath => AppConstants.publicDnsCacheFilePath;
 
   static Future<PublicDnsCatalog?> loadCachedCatalog() async {
     try {

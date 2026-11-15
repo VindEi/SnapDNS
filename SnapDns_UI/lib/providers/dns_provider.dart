@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 import '../core/constants.dart';
 import '../services/dns_engine.dart';
 import '../storage/profile_storage.dart';
@@ -67,7 +66,7 @@ class DnsProvider extends ChangeNotifier {
     if (!isDesktop) {
       try {
         final activeFile =
-            File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
+            File(AppConstants.activeMobileFilePath);
         if (await activeFile.exists()) {
           final savedId = (await activeFile.readAsString()).trim();
           _activeMobileConfig = _profiles.cast<DnsConfiguration?>().firstWhere(
@@ -283,7 +282,7 @@ class DnsProvider extends ChangeNotifier {
 
         try {
           final activeFile =
-              File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
+              File(AppConstants.activeMobileFilePath);
           await activeFile.writeAsString(config.id, flush: true);
         } catch (_) {}
       }
@@ -305,7 +304,7 @@ class DnsProvider extends ChangeNotifier {
 
         try {
           final activeFile =
-              File(p.join(AppConstants.appDataPath, 'active_mobile.txt'));
+              File(AppConstants.activeMobileFilePath);
           if (await activeFile.exists()) {
             await activeFile.delete();
           }

@@ -14,7 +14,7 @@ chmod +x "$DIR/SnapDnsService"
 # FIX: Aligned internal binary casing to match Xcode/Flutter's default capitalized output (SnapDns)
 chmod +x "$DIR/SnapDns.app/Contents/MacOS/SnapDns"
 
-PLIST="/Library/LaunchDaemons/com.vindei.snapdns.plist"
+PLIST="/Library/LaunchDaemons/me.vinde.snapdns.plist"
 
 cat <<EOF > $PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -22,7 +22,7 @@ cat <<EOF > $PLIST
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.vindei.snapdns</string>
+    <string>me.vinde.snapdns</string>
     <key>ProgramArguments</key>
     <array>
         <string>$DIR/SnapDnsService</string>
@@ -39,5 +39,7 @@ EOF
 chown root:wheel "$PLIST"
 chmod 644 "$PLIST"
 
-launchctl load -w $PLIST
+# Idempotent load: unload first if previously running so upgrades refresh cleanly
+launchctl unload "$PLIST" 2>/dev/null || true
+launchctl load -w "$PLIST"
 echo "[SUCCESS] Service installed and started! You can now open SnapDns.app."

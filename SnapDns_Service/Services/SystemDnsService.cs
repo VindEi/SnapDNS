@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using SnapDns.Service.Models;
 using SnapDns.Service.Utilities;
@@ -24,7 +24,7 @@ public partial class SystemDnsService(ILogger<SystemDnsService> logger, DnsProxy
 
             if (!string.IsNullOrWhiteSpace(config.DohUrl) || !string.IsNullOrWhiteSpace(config.DotHostname))
             {
-                bool started = await dnsProxy.StartAsync(config.DohUrl, config.DotHostname);
+                bool started = await dnsProxy.StartAsync(config.DohUrl, config.DotHostname, config.PrimaryDns, config.SecondaryDns);
                 if (!started)
                 {
                     return new PipeResponse

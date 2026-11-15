@@ -41,7 +41,7 @@ class _DynamicAppIconState extends State<DynamicAppIcon> {
     final settings = context.watch<SettingsProvider>();
     final fillHex =
         '#${settings.accentColor.toARGB32().toRadixString(16).substring(2).toLowerCase()}';
-    final strokeHex = settings.isDarkMode ? '#bbbbbb' : '#444444';
+    final strokeHex = fillHex;
 
     final processed = IconEngine.applyColors(svg, fillHex, strokeHex);
 

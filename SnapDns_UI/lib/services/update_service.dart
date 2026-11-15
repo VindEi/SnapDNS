@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
@@ -84,10 +85,12 @@ class UpdateService {
     if (Platform.isWindows && info.windowsExeUrl != null) {
       try {
         final tempDir = await getTemporaryDirectory();
-        final savePath = '${tempDir.path}\\SnapDNS_Update.exe';
+        final savePath = p.join(tempDir.path, 'SnapDNS_Update.exe');
 
         final request = http.Request('GET', Uri.parse(info.windowsExeUrl!));
-        final response = await http.Client().send(request);
+        final client = http.Client();
+        try {
+          final response = await client.send(request);
         final contentLength = response.contentLength ?? 1;
 
         int bytesDownloaded = 0;
@@ -102,6 +105,9 @@ class UpdateService {
 
         await sink.flush();
         await sink.close();
+        } finally {
+          client.close();
+        }
 
         await Process.start(savePath, [], mode: ProcessStartMode.detached);
 

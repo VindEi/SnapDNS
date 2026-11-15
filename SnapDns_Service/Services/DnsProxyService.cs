@@ -1,4 +1,4 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Security;
@@ -11,15 +11,7 @@ namespace SnapDns.Service.Services;
 public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposable
 {
     private UdpClient? _udpListener;
-
-    private static readonly Dictionary<string, IPAddress[]> StaticHosts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "cloudflare-dns.com", [IPAddress.Parse("1.1.1.1"), IPAddress.Parse("1.0.0.1")] },
-        { "one.one.one.one", [IPAddress.Parse("1.1.1.1"), IPAddress.Parse("1.0.0.1")] },
-        { "dns.google", [IPAddress.Parse("8.8.8.8"), IPAddress.Parse("8.8.4.4")] },
-        { "dns.quad9.net", [IPAddress.Parse("9.9.9.9"), IPAddress.Parse("149.112.112.112")] },
-        { "dns.adguard-dns.com", [IPAddress.Parse("94.140.14.14"), IPAddress.Parse("94.140.15.15")] }
-    };
+    private static volatile IPAddress[] _bootstrapIps = [];
 
     private static readonly SocketsHttpHandler Handler = new()
     {
@@ -29,23 +21,7 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
             var host = context.DnsEndPoint.Host;
             var port = context.DnsEndPoint.Port;
 
-            IPAddress[] ips;
-            if (host == "127.0.0.1" || host == "localhost")
-            {
-                ips = [IPAddress.Loopback];
-            }
-            else if (StaticHosts.TryGetValue(host, out var cachedIps))
-            {
-                ips = cachedIps;
-            }
-            else
-            {
-                ips = await ResolveHostViaUdpBootstrap(host, cancellationToken);
-                if (ips.Length == 0)
-                {
-                    ips = await Dns.GetHostAddressesAsync(host, cancellationToken);
-                }
-            }
+            IPAddress[] ips = await ResolveHostAsync(host, cancellationToken);
 
             var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             try
@@ -74,11 +50,18 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
     public string? ActiveDohUrl { get; private set; }
     public string? ActiveDotHostname { get; private set; }
 
-    public Task<bool> StartAsync(string dohUrl, string dotHostname)
+    public Task<bool> StartAsync(string dohUrl, string dotHostname, string primaryDns = "", string secondaryDns = "")
     {
         Stop();
         ActiveDohUrl = dohUrl;
         ActiveDotHostname = dotHostname;
+
+        var bootstrapList = new List<IPAddress>();
+        if (IPAddress.TryParse(primaryDns, out var pIp) && !IPAddress.IsLoopback(pIp) && pIp.AddressFamily == AddressFamily.InterNetwork)
+            bootstrapList.Add(pIp);
+        if (IPAddress.TryParse(secondaryDns, out var sIp) && !IPAddress.IsLoopback(sIp) && sIp.AddressFamily == AddressFamily.InterNetwork)
+            bootstrapList.Add(sIp);
+        _bootstrapIps = [.. bootstrapList];
 
         _cts = new CancellationTokenSource();
         try
@@ -94,21 +77,20 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         }
     }
 
+    private const int SioUdpConnReset = -1744830452;
+
+    private static void DisableWindowsConnReset(Socket socket)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            try { socket.IOControl(SioUdpConnReset, [0], null); } catch { }
+        }
+    }
+
     private UdpClient CreateUdpListener()
     {
         var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 53));
-        if (OperatingSystem.IsWindows())
-        {
-            const int SIO_UDP_CONNRESET = -1744830452;
-            try
-            {
-                listener.Client.IOControl(SIO_UDP_CONNRESET, [0], null);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning("Failed to apply SIO_UDP_CONNRESET on listener: {Msg}", ex.Message);
-            }
-        }
+        DisableWindowsConnReset(listener.Client);
         return listener;
     }
 
@@ -261,19 +243,7 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
             _dotClient.ReceiveTimeout = 2000;
             _dotClient.SendTimeout = 2000;
 
-            IPAddress[] ips;
-            if (StaticHosts.TryGetValue(host, out var cachedIps))
-            {
-                ips = cachedIps;
-            }
-            else
-            {
-                ips = await ResolveHostViaUdpBootstrap(host, ct);
-                if (ips.Length == 0)
-                {
-                    ips = await Dns.GetHostAddressesAsync(host, ct);
-                }
-            }
+            IPAddress[] ips = await ResolveHostAsync(host, ct);
 
             await _dotClient.ConnectAsync(ips, 853, ct);
             _dotStream = new SslStream(_dotClient.GetStream(), false);
@@ -284,51 +254,58 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         finally { _dotSemaphore.Release(); }
     }
 
-    private static async Task<IPAddress[]> ResolveHostViaUdpBootstrap(string host, CancellationToken ct)
+    private static async Task<IPAddress[]> ResolveHostAsync(string host, CancellationToken ct)
     {
-        byte[] query = BuildDnsQuery(host);
-        using var udp = new UdpClient();
-        udp.Client.SendTimeout = 1500;
-        udp.Client.ReceiveTimeout = 1500;
+        if (host == "127.0.0.1" || host == "localhost") return [IPAddress.Loopback];
+        if (IPAddress.TryParse(host, out var directIp)) return [directIp];
 
-        if (OperatingSystem.IsWindows())
+        var bootstrap = _bootstrapIps;
+        if (bootstrap.Length > 0)
         {
-            const int SIO_UDP_CONNRESET = -1744830452;
-            try { udp.Client.IOControl(SIO_UDP_CONNRESET, [0], null); } catch { }
+            var resolved = await ResolveHostViaUdpBootstrap(host, bootstrap, ct);
+            if (resolved.Length > 0) return resolved;
+            return bootstrap;
         }
 
         try
         {
-            await udp.SendAsync(query, query.Length, "1.1.1.1", 53);
-            var result = await udp.ReceiveAsync(ct);
-            return ParseDnsResponse(result.Buffer);
+            return await Dns.GetHostAddressesAsync(host, ct);
         }
         catch
         {
-            try
-            {
-                using var fallbackUdp = new UdpClient();
-                fallbackUdp.Client.SendTimeout = 1500;
-                fallbackUdp.Client.ReceiveTimeout = 1500;
-
-                if (OperatingSystem.IsWindows())
-                {
-                    const int SIO_UDP_CONNRESET = -1744830452;
-                    try { fallbackUdp.Client.IOControl(SIO_UDP_CONNRESET, [0], null); } catch { }
-                }
-
-                await fallbackUdp.SendAsync(query, query.Length, "8.8.8.8", 53);
-                var result = await fallbackUdp.ReceiveAsync(ct);
-                return ParseDnsResponse(result.Buffer);
-            }
-            catch
-            {
-                return [];
-            }
+            return [];
         }
     }
 
-    private static byte[] BuildDnsQuery(string domain)
+    internal static async Task<IPAddress[]> ResolveHostViaUdpBootstrap(string host, IPAddress[] bootstrapServers, CancellationToken ct)
+    {
+        if (bootstrapServers.Length == 0) return [];
+        byte[] query = BuildDnsQuery(host);
+
+        foreach (var server in bootstrapServers)
+        {
+            try
+            {
+                using var udp = new UdpClient();
+                udp.Client.SendTimeout = 1500;
+                udp.Client.ReceiveTimeout = 1500;
+
+                DisableWindowsConnReset(udp.Client);
+
+                await udp.SendAsync(query, query.Length, new IPEndPoint(server, 53));
+                var result = await udp.ReceiveAsync(ct);
+                var resolved = ParseDnsResponse(result.Buffer);
+                if (resolved.Length > 0) return resolved;
+            }
+            catch
+            {
+                // Fall through to next bootstrap server
+            }
+        }
+        return [];
+    }
+
+    public static byte[] BuildDnsQuery(string domain)
     {
         var parts = domain.Split('.');
         var query = new List<byte> { 0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -343,7 +320,7 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         return [.. query];
     }
 
-    private static IPAddress[] ParseDnsResponse(byte[] buffer)
+    public static IPAddress[] ParseDnsResponse(byte[] buffer)
     {
         try
         {
@@ -411,6 +388,7 @@ public partial class DnsProxyService(ILogger<DnsProxyService> logger) : IDisposa
         CloseDot();
         ActiveDohUrl = null;
         ActiveDotHostname = null;
+        _bootstrapIps = [];
     }
 
     public void Dispose()

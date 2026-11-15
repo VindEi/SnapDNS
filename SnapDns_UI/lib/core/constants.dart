@@ -9,7 +9,8 @@ class AppConstants {
 
   static const String repoOwner = "VindEi";
   static const String repoName = "SnapDNS";
-  static const String appVersion = "2.0.1";
+  static const String appVersion = "2.1.0";
+  static const String defaultAccentColor = "#00C8C8";
 
   static String appDataPath = "";
 
@@ -42,4 +43,6 @@ class AppConstants {
 
   static String get settingsFilePath => p.join(appDataPath, 'settings.json');
   static String get profilesFilePath => p.join(appDataPath, 'profiles.json');
+  static String get activeMobileFilePath => p.join(appDataPath, 'active_mobile.txt');
+  static String get publicDnsCacheFilePath => p.join(appDataPath, 'public_dns_cache.json');
 }

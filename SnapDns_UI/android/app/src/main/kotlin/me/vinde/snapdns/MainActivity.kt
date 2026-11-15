@@ -15,12 +15,12 @@ class MainActivity: FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startVpn" -> {
-                    val primary = call.argument<String>("primaryDns") ?: "1.1.1.1"
-                    val secondary = call.argument<String>("secondaryDns")
-                    val privateDns = call.argument<String>("privateDns")
-                    val dohUrl = call.argument<String>("dohUrl")
-                    val hostName = call.argument<String>("hostName")
-                    val resolvedIps: List<String>? = call.argument<List<String>>("resolvedIps")
+                    val primary = call.argument<String>(SnapDnsConstants.KEY_PRIMARY_DNS) ?: SnapDnsConstants.DEFAULT_PRIMARY_DNS
+                    val secondary = call.argument<String>(SnapDnsConstants.KEY_SECONDARY_DNS)
+                    val privateDns = call.argument<String>(SnapDnsConstants.KEY_PRIVATE_DNS)
+                    val dohUrl = call.argument<String>(SnapDnsConstants.KEY_DOH_URL)
+                    val hostName = call.argument<String>(SnapDnsConstants.KEY_HOST_NAME)
+                    val resolvedIps: List<String>? = call.argument<List<String>>(SnapDnsConstants.KEY_RESOLVED_IPS)
 
                     // FIX: Save configurations immediately so they can be retrieved after the UAC prompt
                     savePrefs(primary, secondary, privateDns, dohUrl, hostName, resolvedIps)
@@ -50,13 +50,13 @@ class MainActivity: FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 0 && resultCode == RESULT_OK) {
-            val prefs = getSharedPreferences("SnapDnsPrefs", MODE_PRIVATE)
-            val primary = prefs.getString("primaryDns", "1.1.1.1") ?: "1.1.1.1"
-            val secondary = prefs.getString("secondaryDns", null)
-            val privateDns = prefs.getString("privateDns", null)
-            val dohUrl = prefs.getString("dohUrl", null)
-            val hostName = prefs.getString("hostName", null)
-            val resolvedIpsSet = prefs.getStringSet("resolvedIps", null)
+            val prefs = getSharedPreferences(SnapDnsConstants.PREFS_NAME, MODE_PRIVATE)
+            val primary = prefs.getString(SnapDnsConstants.KEY_PRIMARY_DNS, SnapDnsConstants.DEFAULT_PRIMARY_DNS) ?: SnapDnsConstants.DEFAULT_PRIMARY_DNS
+            val secondary = prefs.getString(SnapDnsConstants.KEY_SECONDARY_DNS, null)
+            val privateDns = prefs.getString(SnapDnsConstants.KEY_PRIVATE_DNS, null)
+            val dohUrl = prefs.getString(SnapDnsConstants.KEY_DOH_URL, null)
+            val hostName = prefs.getString(SnapDnsConstants.KEY_HOST_NAME, null)
+            val resolvedIpsSet = prefs.getStringSet(SnapDnsConstants.KEY_RESOLVED_IPS, null)
             val resolvedIps = resolvedIpsSet?.let { ArrayList(it) }
 
             startDnsVpn(primary, secondary, privateDns, dohUrl, hostName, resolvedIps)
@@ -64,33 +64,24 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun savePrefs(primary: String, secondary: String?, privateDns: String?, dohUrl: String?, hostName: String?, resolvedIps: List<String>?) {
-        val prefs = getSharedPreferences("SnapDnsPrefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(SnapDnsConstants.PREFS_NAME, MODE_PRIVATE)
         prefs.edit().apply {
-            putString("primaryDns", primary)
-            putString("secondaryDns", secondary)
-            putString("privateDns", privateDns)
-            putString("dohUrl", dohUrl)
-            putString("hostName", hostName)
+            putString(SnapDnsConstants.KEY_PRIMARY_DNS, primary)
+            putString(SnapDnsConstants.KEY_SECONDARY_DNS, secondary)
+            putString(SnapDnsConstants.KEY_PRIVATE_DNS, privateDns)
+            putString(SnapDnsConstants.KEY_DOH_URL, dohUrl)
+            putString(SnapDnsConstants.KEY_HOST_NAME, hostName)
             if (resolvedIps != null) {
-                putStringSet("resolvedIps", HashSet(resolvedIps))
+                putStringSet(SnapDnsConstants.KEY_RESOLVED_IPS, HashSet(resolvedIps))
             } else {
-                remove("resolvedIps")
+                remove(SnapDnsConstants.KEY_RESOLVED_IPS)
             }
             apply()
         }
     }
 
     private fun startDnsVpn(primary: String, secondary: String?, privateDns: String?, dohUrl: String?, hostName: String?, resolvedIps: List<String>?) {
-        val serviceIntent = Intent(this, DnsVpnService::class.java).apply {
-            putExtra("primaryDns", primary)
-            putExtra("secondaryDns", secondary)
-            putExtra("privateDns", privateDns)
-            putExtra("dohUrl", dohUrl)
-            putExtra("hostName", hostName)
-            if (resolvedIps != null) {
-                putStringArrayListExtra("resolvedIps", ArrayList(resolvedIps))
-            }
-        }
+        val serviceIntent = SnapDnsConstants.buildVpnIntent(this, primary, secondary, privateDns, dohUrl, hostName, resolvedIps)
         startService(serviceIntent)
     }
 }

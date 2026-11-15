@@ -1,3 +1,5 @@
+import '../core/constants.dart';
+
 class AppSettings {
   bool runOnStartup;
   bool minimizeToTray;
@@ -21,8 +23,8 @@ class AppSettings {
     this.disableIpv6 = false,
     this.isWideMode = false,
     this.theme = "Dark",
-    this.accentColor = "#00C8C8",
-    this.customHex = "#00C8C8",
+    this.accentColor = AppConstants.defaultAccentColor,
+    this.customHex = AppConstants.defaultAccentColor,
   });
 
   Map<String, dynamic> toJson() => {
@@ -49,7 +51,7 @@ class AppSettings {
         disableIpv6: json['disableIpv6'] ?? false,
         isWideMode: json['isWideMode'] ?? false,
         theme: json['theme'] ?? "Dark",
-        accentColor: json['accentColor'] ?? "#00C8C8",
-        customHex: json['customHex'] ?? "#00C8C8",
+        accentColor: json['accentColor'] ?? AppConstants.defaultAccentColor,
+        customHex: json['customHex'] ?? AppConstants.defaultAccentColor,
       );
 }

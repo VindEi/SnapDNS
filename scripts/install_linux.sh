@@ -33,6 +33,6 @@ chmod 644 $UNIT_FILE
 
 systemctl daemon-reload
 systemctl enable snapdns.service
-systemctl start snapdns.service
+systemctl restart snapdns.service
 
 echo "[SUCCESS] Service installed and started! You can now run the snapdns app."

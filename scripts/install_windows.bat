@@ -10,9 +10,17 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
-:: Register and start the service
-:: FIX: Escaped quotes inside binPath to support spaces in the installation directory path
-sc create SnapDnsService binPath= "\"%~dp0SnapDnsService.exe\"" start= auto
+:: Register or update and start the service
+sc query SnapDnsService >nul 2>&1
+if %errorLevel% equ 0 (
+    echo Updating existing SnapDnsService...
+    sc stop SnapDnsService >nul 2>&1
+    sc config SnapDnsService binPath= "\"%~dp0SnapDnsService.exe\"" start= auto >nul
+) else (
+    echo Registering SnapDnsService...
+    sc create SnapDnsService binPath= "\"%~dp0SnapDnsService.exe\"" start= auto >nul
+)
+
 sc start SnapDnsService
 
 echo.
