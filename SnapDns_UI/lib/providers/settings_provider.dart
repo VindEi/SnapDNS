@@ -392,27 +392,35 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> importProfiles(Function(String) onData) async {
     try {
-      final FilePickerResult? res = await FilePicker.pickFiles(
+      final dynamic res = await FilePicker.pickFiles(
         dialogTitle: 'Import DNS Profiles',
         type: FileType.custom,
         allowedExtensions: ['json', 'txt'],
       );
 
-      if (res != null && res.files.isNotEmpty) {
-        final file = res.files.single;
-        String? content;
+      if (res != null) {
+        final List<dynamic> files = res is List
+            ? res
+            : (res.files is List ? res.files as List : []);
 
-        try {
-          final bytes = await file.readAsBytes();
-          content = utf8.decode(bytes);
-        } catch (_) {
-          if (file.path != null) {
-            content = await File(file.path!).readAsString();
+        if (files.isNotEmpty) {
+          final dynamic file = files.first;
+          String? content;
+
+          try {
+            final bytes = await file.readAsBytes();
+            content = utf8.decode(bytes as List<int>);
+          } catch (_) {
+            if (file.bytes != null) {
+              content = utf8.decode(file.bytes as List<int>);
+            } else if (file.path != null) {
+              content = await File(file.path as String).readAsString();
+            }
           }
-        }
 
-        if (content != null && content.trim().isNotEmpty) {
-          onData(content);
+          if (content != null && content.trim().isNotEmpty) {
+            onData(content);
+          }
         }
       }
     } catch (e) {
