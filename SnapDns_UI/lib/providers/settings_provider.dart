@@ -359,7 +359,7 @@ class SettingsProvider extends ChangeNotifier {
   Future<bool> exportProfiles(String json) async {
     try {
       final bytes = utf8.encode(json);
-      final String? outputFile = await FilePicker.saveFile(
+      final dynamic outputFile = await FilePicker.saveFile(
         dialogTitle: 'Export DNS Profiles',
         fileName: 'profiles.json',
         type: FileType.custom,
@@ -368,9 +368,19 @@ class SettingsProvider extends ChangeNotifier {
       );
 
       if (outputFile != null) {
-        final file = File(outputFile);
-        if (!await file.exists() || await file.length() == 0) {
-          await file.writeAsBytes(bytes, flush: true);
+        String? filePath;
+        if (outputFile is Uri) {
+          filePath = outputFile.scheme == 'file'
+              ? outputFile.toFilePath()
+              : outputFile.path;
+        } else if (outputFile is String) {
+          filePath = outputFile;
+        }
+        if (filePath != null && filePath.isNotEmpty) {
+          final file = File(filePath);
+          if (!await file.exists() || await file.length() == 0) {
+            await file.writeAsBytes(bytes, flush: true);
+          }
         }
         return true;
       }
