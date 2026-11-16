@@ -38,7 +38,7 @@ jobs:
           mv build/app/outputs/flutter-apk/app-x86_64-release.apk ../SnapDNS_Android_x86_64.apk
 
       - name: Upload Artifacts
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             SnapDNS_Android_arm64-v8a.apk
@@ -88,7 +88,7 @@ jobs:
           zip -r SnapDNS_Linux_x64.zip SnapDNS_Linux_x64/
 
       - name: Upload Artifacts
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: SnapDNS_Linux_x64.zip
         env:
@@ -130,7 +130,7 @@ jobs:
           zip -r SnapDNS_macOS_arm64.zip SnapDNS_macOS_arm64/
 
       - name: Upload Artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: SnapDNS_macOS_arm64.zip
         env:
@@ -172,7 +172,7 @@ jobs:
           Compress-Archive -Path "SnapDNS_Windows_x64_Portable\*" -DestinationPath "SnapDNS_Windows_x64_Portable.zip"
 
       - name: Upload Artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: SnapDNS_Windows_x64_Portable.zip
         env:
